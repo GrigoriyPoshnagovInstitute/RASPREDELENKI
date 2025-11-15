@@ -1,0 +1,24 @@
+syntax = "proto3";
+package Notification;
+
+option go_package = "/.;notificationinternal";
+
+service NotificationInternalService {
+  rpc FindNotificationsForUser(FindNotificationsForUserRequest) returns (FindNotificationsForUserResponse);
+}
+
+message FindNotificationsForUserRequest {
+  string userID = 1;
+}
+
+message FindNotificationsForUserResponse {
+  repeated Notification notifications = 1;
+}
+
+message Notification {
+  string notificationID = 1;
+  string userID = 2;
+  string orderID = 3;
+  string message = 4;
+  int64 createdAt = 5;
+}

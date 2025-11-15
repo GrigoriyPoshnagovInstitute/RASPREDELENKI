@@ -1,0 +1,79 @@
+services:
+  notificationservice:
+    image: notificationservice
+    container_name: notificationservice
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      - service
+    ports:
+      - "8089:8081"
+      - "8090:8082"
+    environment:
+      NOTIFICATION_DATABASE_HOST: notificationservice-db
+      NOTIFICATION_DATABASE_NAME: notificationservice_db
+      NOTIFICATION_DATABASE_USER: notificationservice
+      NOTIFICATION_DATABASE_PASSWORD: 12345Q
+    depends_on:
+      notificationservice-db:
+        condition: service_healthy
+
+  notificationservice-message-handler:
+    image: notificationservice
+    container_name: notificationservice-message-handler
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      - message-handler
+    environment:
+      NOTIFICATION_DATABASE_HOST: notificationservice-db
+      NOTIFICATION_DATABASE_NAME: notificationservice_db
+      NOTIFICATION_DATABASE_USER: notificationservice
+      NOTIFICATION_DATABASE_PASSWORD: 12345Q
+
+      NOTIFICATION_AMQP_HOST: userservice-rmq
+      NOTIFICATION_AMQP_USER: guest
+      NOTIFICATION_AMQP_PASSWORD: guest
+    depends_on:
+      notificationservice-db:
+        condition: service_healthy
+      userservice-rmq:
+        condition: service_healthy
+
+  notificationservice-db:
+    image: "mysql:8.3"
+    container_name: notificationservice-db
+    command: [ "--max_connections=100" ]
+    volumes:
+      - "notificationservice-db-data:/var/lib/mysql"
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: yes
+      MYSQL_DATABASE: notificationservice_db
+      MYSQL_USER: notificationservice
+      MYSQL_PASSWORD: 12345Q
+    ports:
+      - "3310:3306"
+    healthcheck:
+      test: mysql -h127.0.0.1 -uroot -e 'SELECT 1'
+      interval: 10s
+      timeout: 30s
+
+  userservice-rmq:
+    image: "rabbitmq:4.2.0-management-alpine"
+    container_name: userservice-rmq
+    hostname: userservice-rmq
+    ports:
+      - "15672:15672"
+    volumes:
+      - "userservice-rmq-data:/var/lib/rabbitmq/mnesia"
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  notificationservice-db-data:
+  userservice-rmq-data:

@@ -1,0 +1,30 @@
+syntax = "proto3";
+package Payment;
+
+option go_package = "/.;paymentinternal";
+
+service PaymentInternalService {
+  rpc StoreUserBalance(StoreUserBalanceRequest) returns (StoreUserBalanceResponse);
+  rpc FindUserBalance(FindUserBalanceRequest) returns (FindUserBalanceResponse);
+}
+
+message StoreUserBalanceRequest {
+  UserBalance balance = 1;
+}
+
+message StoreUserBalanceResponse {
+  string userID = 1;
+}
+
+message FindUserBalanceRequest {
+  string userID = 1;
+}
+
+message FindUserBalanceResponse {
+  optional UserBalance balance = 1;
+}
+
+message UserBalance {
+  string userID = 1;
+  int64 balance = 2;
+}

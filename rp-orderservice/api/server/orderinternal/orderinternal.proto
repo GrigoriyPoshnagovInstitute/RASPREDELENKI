@@ -1,0 +1,47 @@
+syntax = "proto3";
+package Order;
+
+option go_package = "/.;orderinternal";
+
+service OrderInternalService {
+  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
+  rpc FindOrder(FindOrderRequest) returns (FindOrderResponse);
+}
+
+message CreateOrderRequest {
+  string userID = 1;
+  repeated OrderItem items = 2;
+}
+
+message CreateOrderResponse {
+  string orderID = 1;
+}
+
+message FindOrderRequest {
+  string orderID = 1;
+}
+
+message FindOrderResponse {
+  optional Order order = 1;
+}
+
+message OrderItem {
+  string productID = 1;
+  int32 quantity = 2;
+}
+
+message Order {
+  string orderID = 1;
+  string userID = 2;
+  repeated OrderItem items = 3;
+  int64 totalPrice = 4;
+  OrderStatus status = 5;
+  int64 createdAt = 6;
+}
+
+enum OrderStatus {
+  CREATED = 0;
+  PAYMENT_PENDING = 1;
+  PAID = 2;
+  CANCELLED = 3;
+}

@@ -1,0 +1,84 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"net"
+	"net/http"
+	"time"
+
+	"gitea.xscloud.ru/xscloud/golib/pkg/application/logging"
+	libio "gitea.xscloud.ru/xscloud/golib/pkg/common/io"
+	"github.com/gorilla/mux"
+	"github.com/urfave/cli/v2"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+
+	"notificationservice/api/server/notificationinternal"
+	"notificationservice/pkg/notification/infrastructure/mysql/query"
+	"notificationservice/pkg/notification/infrastructure/transport"
+	"notificationservice/pkg/notification/infrastructure/transport/middlewares"
+)
+
+type serviceConfig struct {
+	Service  Service  `envconfig:"service"`
+	Database Database `envconfig:"database" required:"true"`
+}
+
+func service(logger logging.Logger) *cli.Command {
+	return &cli.Command{
+		Name:   "service",
+		Before: migrateImpl(logger),
+		Action: func(c *cli.Context) error {
+			cnf, err := parseEnvs[serviceConfig]()
+			if err != nil {
+				return err
+			}
+
+			closer := libio.NewMultiCloser()
+			defer func() {
+				err = errors.Join(err, closer.Close())
+			}()
+
+			databaseConnector, err := newDatabaseConnector(cnf.Database)
+			if err != nil {
+				return err
+			}
+			closer.AddCloser(databaseConnector)
+
+			notificationAPI := transport.NewNotificationInternalAPI(
+				query.NewNotificationQueryService(databaseConnector.TransactionalClient()),
+			)
+
+			errGroup := errgroup.Group{}
+			errGroup.Go(func() error {
+				listener, err := net.Listen("tcp", cnf.Service.GRPCAddress)
+				if err != nil {
+					return err
+				}
+				grpcServer := grpc.NewServer(grpc.ChainUnaryInterceptor(
+					middlewares.NewGRPCLoggingMiddleware(logger),
+				))
+				notificationinternal.RegisterNotificationInternalServiceServer(grpcServer, notificationAPI)
+				graceCallback(c.Context, logger, cnf.Service.GracePeriod, func(_ context.Context) error {
+					grpcServer.GracefulStop()
+					return nil
+				})
+				return grpcServer.Serve(listener)
+			})
+			errGroup.Go(func() error {
+				router := mux.NewRouter()
+				registerHealthcheck(router)
+				server := http.Server{
+					Addr:              cnf.Service.HTTPAddress,
+					Handler:           router,
+					ReadHeaderTimeout: 5 * time.Second,
+				}
+				graceCallback(c.Context, logger, cnf.Service.GracePeriod, server.Shutdown)
+				return server.ListenAndServe()
+			})
+
+			return errGroup.Wait()
+		},
+	}
+}
