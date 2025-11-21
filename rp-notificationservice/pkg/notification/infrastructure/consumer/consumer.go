@@ -18,6 +18,7 @@ const (
 	queueName       = "notification_events"
 	exchangeName    = "domain_event_exchange"
 	orderRoutingKey = "order.*"
+	userRoutingKey  = "user.*"
 )
 
 type EventConsumer struct {
@@ -53,7 +54,7 @@ func (c *EventConsumer) Start() error {
 		},
 		&amqp.BindConfig{
 			ExchangeName: exchangeName,
-			RoutingKeys:  []string{orderRoutingKey},
+			RoutingKeys:  []string{orderRoutingKey, userRoutingKey},
 		},
 		nil,
 	)
@@ -70,6 +71,20 @@ func (c *EventConsumer) handle(ctx context.Context, delivery amqp.Delivery) erro
 	var message string
 
 	switch delivery.Type {
+
+	case "user_created":
+		var event struct {
+			UserID string `json:"user_id"`
+			Login  string `json:"login"`
+		}
+		if err = json.Unmarshal(delivery.Body, &event); err != nil {
+			err = errors.Wrap(err, "failed to unmarshal user_created")
+			break
+		}
+
+		l.Info(fmt.Sprintf("Sending welcome email to new user %s (%s)", event.Login, event.UserID))
+		return nil
+
 	case "order_created":
 		var event struct {
 			OrderID string `json:"order_id"`
@@ -92,8 +107,6 @@ func (c *EventConsumer) handle(ctx context.Context, delivery amqp.Delivery) erro
 			break
 		}
 		orderID, _ = uuid.Parse(event.OrderID)
-		// UserID здесь неизвестен, в реальной системе его нужно было бы доставать из заказа
-		// Для простоты мы оставим его пустым или вам нужно будет добавить его в событие OrderPaid
 		userID = uuid.Nil
 		message = fmt.Sprintf("Order #%s has been paid successfully.", orderID.String())
 
@@ -107,7 +120,7 @@ func (c *EventConsumer) handle(ctx context.Context, delivery amqp.Delivery) erro
 			break
 		}
 		orderID, _ = uuid.Parse(event.OrderID)
-		userID = uuid.Nil // Аналогично order_paid
+		userID = uuid.Nil
 		message = fmt.Sprintf("Order #%s has been cancelled. Reason: %s", orderID.String(), event.Reason)
 
 	default:
@@ -123,7 +136,7 @@ func (c *EventConsumer) handle(ctx context.Context, delivery amqp.Delivery) erro
 	if orderID != uuid.Nil {
 		_, createErr := c.notificationService.CreateNotification(ctx, orderID, userID, message)
 		if createErr != nil {
-			err = createErr // Сохраняем ошибку, если не удалось создать уведомление
+			err = createErr
 			l.Error(err, "failed to create notification")
 		}
 	}

@@ -13,13 +13,17 @@ import (
 	"github.com/urfave/cli/v2"
 	"golang.org/x/sync/errgroup"
 
+	appservice "userservice/pkg/user/application/service"
 	"userservice/pkg/user/infrastructure/integrationevent"
+	inframysql "userservice/pkg/user/infrastructure/mysql"
+	"userservice/pkg/user/infrastructure/temporal"
 )
 
 type messageHandlerConfig struct {
 	Service  Service  `envconfig:"service"`
 	Database Database `envconfig:"database" required:"true"`
 	AMQP     AMQP     `envconfig:"amqp" required:"true"`
+	Temporal Temporal `envconfig:"temporal" required:"true"`
 }
 
 func messageHandler(logger logging.Logger) *cli.Command {
@@ -44,15 +48,54 @@ func messageHandler(logger logging.Logger) *cli.Command {
 			closer.AddCloser(databaseConnector)
 			databaseConnectionPool := mysql.NewConnectionPool(databaseConnector.TransactionalClient())
 
+			temporalClient, err := temporal.NewClient(logger, cnf.Temporal.Host)
+			if err != nil {
+				return err
+			}
+			closer.AddCloser(libio.CloserFunc(func() error {
+				temporalClient.Close()
+				return nil
+			}))
+			workflowService := temporal.NewWorkflowService(temporalClient)
+
+			libUoW := mysql.NewUnitOfWork(databaseConnectionPool, inframysql.NewRepositoryProvider)
+			libLUow := mysql.NewLockableUnitOfWork(libUoW, mysql.NewLocker(databaseConnectionPool))
+			uow := inframysql.NewUnitOfWork(libUoW)
+			luow := inframysql.NewLockableUnitOfWork(libLUow)
+
+			eventDispatcher := outbox.NewEventDispatcher(appID, integrationevent.TransportName, integrationevent.NewEventSerializer(), libUoW)
+			userService := appservice.NewUserService(uow, luow, eventDispatcher)
+
 			amqpConnection := newAMQPConnection(cnf.AMQP, logger)
+			queueConfig := &amqp.QueueConfig{
+				Name:    integrationevent.QueueName,
+				Durable: true,
+			}
+			bindConfig := &amqp.BindConfig{
+				QueueName:    integrationevent.QueueName,
+				ExchangeName: integrationevent.ExchangeName,
+				RoutingKeys:  []string{integrationevent.RoutingKeyPrefix + "#"},
+			}
 			amqpEventProducer := amqpConnection.Producer(
 				&amqp.ExchangeConfig{
 					Name:    integrationevent.ExchangeName,
 					Kind:    integrationevent.ExchangeKind,
 					Durable: true,
 				},
-				nil,
-				nil,
+				queueConfig,
+				bindConfig,
+			)
+
+			amqpTransport := integrationevent.NewAMQPTransport(logger, workflowService, userService)
+
+			amqpConnection.Consumer(
+				c.Context,
+				amqpTransport.Handler(),
+				queueConfig,
+				bindConfig,
+				&amqp.QoSConfig{
+					PrefetchCount: 100,
+				},
 			)
 			err = amqpConnection.Start()
 			if err != nil {

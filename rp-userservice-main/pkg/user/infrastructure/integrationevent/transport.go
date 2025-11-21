@@ -12,6 +12,7 @@ const (
 	TransportName    = "domain"
 	ExchangeName     = "domain_event_exchange"
 	ExchangeKind     = "topic"
+	QueueName        = "user_domain_event"
 	RoutingKeyPrefix = "user."
 	ContentType      = "application/json"
 )
