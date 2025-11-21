@@ -13,7 +13,7 @@ const TaskQueue = "userservice_task_queue"
 
 type WorkflowService interface {
 	RunUserUpdatedWorkflow(ctx context.Context, id string, event model.UserUpdated) error
-	RunUserDeletedWorkflow(ctx context.Context, id string, userID string) error
+	RunUserDeletedWorkflow(ctx context.Context, id, userID string) error
 }
 
 func NewWorkflowService(temporalClient client.Client) WorkflowService {
@@ -38,7 +38,7 @@ func (s *workflowService) RunUserUpdatedWorkflow(ctx context.Context, id string,
 	return err
 }
 
-func (s *workflowService) RunUserDeletedWorkflow(ctx context.Context, id string, userID string) error {
+func (s *workflowService) RunUserDeletedWorkflow(ctx context.Context, id, userID string) error {
 	_, err := s.temporalClient.ExecuteWorkflow(
 		ctx,
 		client.StartWorkflowOptions{
