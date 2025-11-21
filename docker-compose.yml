@@ -1,13 +1,13 @@
 services:
   userservice:
+    container_name: userservice
     build:
       context: ./rp-userservice-main
-    container_name: userservice
+      dockerfile: Dockerfile
     command:
       - service
     ports:
       - "8081:8081"
-      - "8082:8082"
     environment:
       USER_DATABASE_HOST: userservice-db
       USER_DATABASE_NAME: userservice_db
@@ -17,10 +17,31 @@ services:
       userservice-db:
         condition: service_healthy
 
-  userservice-message-handler:
+  userservice-workflow-worker:
+    container_name: userservice-workflow-worker
     build:
       context: ./rp-userservice-main
+      dockerfile: Dockerfile
+    command:
+      - workflow-worker
+    environment:
+      USER_DATABASE_HOST: userservice-db
+      USER_DATABASE_NAME: userservice_db
+      USER_DATABASE_USER: userservice
+      USER_DATABASE_PASSWORD: 12345Q
+      # Вот этой переменной не хватало:
+      USER_TEMPORAL_HOST: userservice-temporal:7233
+    depends_on:
+      userservice-db:
+        condition: service_healthy
+      userservice-temporal:
+        condition: service_started
+
+  userservice-message-handler:
     container_name: userservice-message-handler
+    build:
+      context: ./rp-userservice-main
+      dockerfile: Dockerfile
     command:
       - message-handler
     environment:
@@ -28,14 +49,19 @@ services:
       USER_DATABASE_NAME: userservice_db
       USER_DATABASE_USER: userservice
       USER_DATABASE_PASSWORD: 12345Q
-      USER_AMQP_HOST: rabbitmq
+
+      USER_AMQP_HOST: userservice-rmq
       USER_AMQP_USER: guest
       USER_AMQP_PASSWORD: guest
+      # И этой:
+      USER_TEMPORAL_HOST: userservice-temporal:7233
     depends_on:
       userservice-db:
         condition: service_healthy
-      rabbitmq:
+      userservice-rmq:
         condition: service_healthy
+      userservice-temporal:
+        condition: service_started
 
   productservice:
     build:
@@ -66,13 +92,13 @@ services:
       PRODUCT_DATABASE_NAME: productservice_db
       PRODUCT_DATABASE_USER: productservice
       PRODUCT_DATABASE_PASSWORD: 12345Q
-      PRODUCT_AMQP_HOST: rabbitmq
+      PRODUCT_AMQP_HOST: userservice-rmq
       PRODUCT_AMQP_USER: guest
       PRODUCT_AMQP_PASSWORD: guest
     depends_on:
       productservice-db:
         condition: service_healthy
-      rabbitmq:
+      userservice-rmq:
         condition: service_healthy
 
   paymentservice:
@@ -104,13 +130,13 @@ services:
       PAYMENT_DATABASE_NAME: paymentservice_db
       PAYMENT_DATABASE_USER: paymentservice
       PAYMENT_DATABASE_PASSWORD: 12345Q
-      PAYMENT_AMQP_HOST: rabbitmq
+      PAYMENT_AMQP_HOST: userservice-rmq
       PAYMENT_AMQP_USER: guest
       PAYMENT_AMQP_PASSWORD: guest
     depends_on:
       paymentservice-db:
         condition: service_healthy
-      rabbitmq:
+      userservice-rmq:
         condition: service_healthy
 
   orderservice:
@@ -142,13 +168,13 @@ services:
       ORDER_DATABASE_NAME: orderservice_db
       ORDER_DATABASE_USER: orderservice
       ORDER_DATABASE_PASSWORD: 12345Q
-      ORDER_AMQP_HOST: rabbitmq
+      ORDER_AMQP_HOST: userservice-rmq
       ORDER_AMQP_USER: guest
       ORDER_AMQP_PASSWORD: guest
     depends_on:
       orderservice-db:
         condition: service_healthy
-      rabbitmq:
+      userservice-rmq:
         condition: service_healthy
 
   notificationservice:
@@ -180,13 +206,13 @@ services:
       NOTIFICATION_DATABASE_NAME: notificationservice_db
       NOTIFICATION_DATABASE_USER: notificationservice
       NOTIFICATION_DATABASE_PASSWORD: 12345Q
-      NOTIFICATION_AMQP_HOST: rabbitmq
+      NOTIFICATION_AMQP_HOST: userservice-rmq
       NOTIFICATION_AMQP_USER: guest
       NOTIFICATION_AMQP_PASSWORD: guest
     depends_on:
       notificationservice-db:
         condition: service_healthy
-      rabbitmq:
+      userservice-rmq:
         condition: service_healthy
 
   userservice-db:
@@ -279,20 +305,59 @@ services:
       interval: 10s
       timeout: 30s
 
-  rabbitmq:
-    image: "rabbitmq:3.8-management-alpine"
-    container_name: rabbitmq
-    hostname: rabbitmq
+  userservice-rmq:
+    image: "rabbitmq:4.2.0-management-alpine"
+    container_name: userservice-rmq
+    hostname: userservice-rmq
     ports:
       - "15672:15672"
       - "5672:5672"
     volumes:
-      - "rabbitmq-data:/var/lib/rabbitmq/mnesia"
+      - "userservice-rmq-data:/var/lib/rabbitmq/mnesia"
     healthcheck:
       test: rabbitmq-diagnostics -q ping
       interval: 1s
       timeout: 3s
       retries: 30
+
+  userservice-temporal:
+    container_name: userservice-temporal
+    depends_on:
+      userservice-db:
+        condition: service_healthy
+    environment:
+      - DB=mysql8
+      - DB_PORT=3306
+      - MYSQL_USER=root
+      - MYSQL_PWD=
+      - MYSQL_SEEDS=userservice-db
+      - TEMPORAL_ADDRESS=userservice-temporal:7233
+      - TEMPORAL_CLI_ADDRESS=userservice-temporal:7233
+    image: temporalio/auto-setup:1.29.1
+    ports:
+      - 7233:7233
+
+  userservice-temporal-admin-tools:
+    container_name: userservice-temporal-admin-tools
+    depends_on:
+      - userservice-temporal
+    environment:
+      - TEMPORAL_ADDRESS=userservice-temporal:7233
+      - TEMPORAL_CLI_ADDRESS=userservice-temporal:7233
+    image: temporalio/admin-tools:1.29.1-tctl-1.18.4-cli-1.5.0
+    stdin_open: true
+    tty: true
+
+  userservice-temporal-ui:
+    container_name: userservice-temporal-ui
+    depends_on:
+      - userservice-temporal
+    environment:
+      - TEMPORAL_ADDRESS=userservice-temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    image: temporalio/ui:2.34.0
+    ports:
+      - 8080:8080
 
 volumes:
   userservice-db-data:
@@ -300,4 +365,4 @@ volumes:
   paymentservice-db-data:
   orderservice-db-data:
   notificationservice-db-data:
-  rabbitmq-data:
+  userservice-rmq-data:
