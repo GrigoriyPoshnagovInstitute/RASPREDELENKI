@@ -2,10 +2,10 @@ module notificationservice
 
 go 1.25.3
 
-replace gitea.xscloud.ru/xscloud/golib v1.2.2 => github.com/veresnikov/rp-golib v1.2.2
+replace gitea.xscloud.ru/xscloud/golib v1.2.4 => github.com/veresnikov/rp-golib v1.2.4
 
 require (
-	gitea.xscloud.ru/xscloud/golib v1.2.2
+	gitea.xscloud.ru/xscloud/golib v1.2.4
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.7.4
 	github.com/kelseyhightower/envconfig v1.4.0

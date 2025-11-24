@@ -44,7 +44,7 @@ func (m *StubNotifRepo) Store(n domainmodel.Notification) error {
 	return args.Error(0)
 }
 
-func (m *StubNotifRepo) FindForUser(uid uuid.UUID) ([]domainmodel.Notification, error) {
+func (m *StubNotifRepo) FindForUser(_ uuid.UUID) ([]domainmodel.Notification, error) {
 	return nil, nil
 }
 

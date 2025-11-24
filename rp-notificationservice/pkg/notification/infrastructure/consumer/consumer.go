@@ -14,13 +14,6 @@ import (
 	appservice "notificationservice/pkg/notification/application/service"
 )
 
-const (
-	queueName       = "notification_events"
-	exchangeName    = "domain_event_exchange"
-	orderRoutingKey = "order.*"
-	userRoutingKey  = "user.*"
-)
-
 type EventConsumer struct {
 	conn                amqp.Connection
 	notificationService appservice.NotificationService
@@ -44,22 +37,8 @@ func NewEventConsumer(
 	}, nil
 }
 
-func (c *EventConsumer) Start() error {
-	_ = c.conn.Consumer(
-		c.ctx,
-		c.handle,
-		&amqp.QueueConfig{
-			Name:    queueName,
-			Durable: true,
-		},
-		&amqp.BindConfig{
-			ExchangeName: exchangeName,
-			RoutingKeys:  []string{orderRoutingKey, userRoutingKey},
-		},
-		nil,
-	)
-	<-c.ctx.Done()
-	return nil
+func (c *EventConsumer) Handler() amqp.Handler {
+	return c.handle
 }
 
 func (c *EventConsumer) handle(ctx context.Context, delivery amqp.Delivery) error {
@@ -71,7 +50,6 @@ func (c *EventConsumer) handle(ctx context.Context, delivery amqp.Delivery) erro
 	var message string
 
 	switch delivery.Type {
-
 	case "user_created":
 		var event struct {
 			UserID string `json:"user_id"`

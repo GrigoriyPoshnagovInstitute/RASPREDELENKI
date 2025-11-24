@@ -65,13 +65,15 @@ func (m *StubUserRepository) Find(spec domainmodel.FindSpec) (*domainmodel.User,
 	return args.Get(0).(*domainmodel.User), args.Error(1)
 }
 
-func (m *StubUserRepository) HardDelete(id uuid.UUID) error {
+// ИСПРАВЛЕНО: id заменен на _
+func (m *StubUserRepository) HardDelete(_ uuid.UUID) error {
 	return nil
 }
 
 type DummyDispatcher struct{}
 
-func (d *DummyDispatcher) Dispatch(ctx context.Context, event outbox.Event) error {
+// ИСПРАВЛЕНО: ctx и event заменены на _
+func (d *DummyDispatcher) Dispatch(_ context.Context, _ outbox.Event) error {
 	return nil
 }
 

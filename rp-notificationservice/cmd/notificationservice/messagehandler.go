@@ -7,6 +7,7 @@ import (
 
 	"gitea.xscloud.ru/xscloud/golib/pkg/application/logging"
 	libio "gitea.xscloud.ru/xscloud/golib/pkg/common/io"
+	"gitea.xscloud.ru/xscloud/golib/pkg/infrastructure/amqp"
 	"gitea.xscloud.ru/xscloud/golib/pkg/infrastructure/mysql"
 	"github.com/gorilla/mux"
 	"github.com/urfave/cli/v2"
@@ -50,6 +51,24 @@ func messageHandler(logger logging.Logger) *cli.Command {
 				return err
 			}
 
+			queueConfig := &amqp.QueueConfig{
+				Name:    "notification_events",
+				Durable: true,
+			}
+			bindConfig := &amqp.BindConfig{
+				QueueName:    "notification_events",
+				ExchangeName: "domain_event_exchange",
+				RoutingKeys:  []string{"order.*", "user.*"},
+			}
+
+			amqpConnection.Consumer(
+				c.Context,
+				eventConsumer.Handler(),
+				queueConfig,
+				bindConfig,
+				nil,
+			)
+
 			err = amqpConnection.Start()
 			if err != nil {
 				return err
@@ -59,10 +78,6 @@ func messageHandler(logger logging.Logger) *cli.Command {
 			}))
 
 			errGroup := errgroup.Group{}
-
-			errGroup.Go(func() error {
-				return eventConsumer.Start()
-			})
 
 			errGroup.Go(func() error {
 				router := mux.NewRouter()

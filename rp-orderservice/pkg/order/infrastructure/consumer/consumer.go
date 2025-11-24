@@ -14,13 +14,6 @@ import (
 	"orderservice/pkg/order/domain/model"
 )
 
-const (
-	queueName         = "order_events"
-	exchangeName      = "domain_event_exchange"
-	userRoutingKey    = "user.*"
-	productRoutingKey = "product.*"
-)
-
 type EventConsumer struct {
 	conn            amqp.Connection
 	dataSyncService appservice.DataSyncService
@@ -46,22 +39,8 @@ func NewEventConsumer(
 	}, nil
 }
 
-func (c *EventConsumer) Start() error {
-	_ = c.conn.Consumer(
-		c.ctx,
-		c.handle,
-		&amqp.QueueConfig{
-			Name:    queueName,
-			Durable: true,
-		},
-		&amqp.BindConfig{
-			ExchangeName: exchangeName,
-			RoutingKeys:  []string{userRoutingKey, productRoutingKey},
-		},
-		nil,
-	)
-	<-c.ctx.Done()
-	return nil
+func (c *EventConsumer) Handler() amqp.Handler {
+	return c.handle
 }
 
 func (c *EventConsumer) handle(ctx context.Context, delivery amqp.Delivery) error {
@@ -88,7 +67,7 @@ func (c *EventConsumer) handle(ctx context.Context, delivery amqp.Delivery) erro
 			UserID: userID,
 			Login:  event.Login,
 		})
-
+	// поддеержать удаление юзера
 	case "product_created", "product_updated":
 		var event struct {
 			ProductID string `json:"product_id"`

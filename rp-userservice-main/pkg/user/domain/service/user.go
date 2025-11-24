@@ -62,6 +62,7 @@ func (u userService) CreateUser(status model.UserStatus, login string) (uuid.UUI
 		return uuid.Nil, err
 	}
 
+	// тута кричим, что юзер создан
 	return userID, u.eventDispatcher.Dispatch(&model.UserCreated{
 		UserID:    userID,
 		Status:    status,
@@ -90,6 +91,7 @@ func (u userService) UpdateUserStatus(userID uuid.UUID, status model.UserStatus)
 		return err
 	}
 
+	// тута кричим, что юзер обновлен
 	return u.eventDispatcher.Dispatch(&model.UserUpdated{
 		UserID:    userID,
 		UpdatedAt: currentTime,
@@ -144,6 +146,7 @@ func (u userService) UpdateUserEmail(userID uuid.UUID, email *string) error {
 		})
 	}
 
+	// тута кричим, что юзер обновлен
 	return u.eventDispatcher.Dispatch(&model.UserUpdated{
 		UserID:    userID,
 		UpdatedAt: currentTime,
@@ -187,6 +190,7 @@ func (u userService) UpdateUserTelegram(userID uuid.UUID, telegram *string) erro
 		return err
 	}
 
+	// тута кричим, что юзер обновлен
 	if telegram == nil {
 		return u.eventDispatcher.Dispatch(&model.UserUpdated{
 			UserID:    userID,
@@ -198,6 +202,7 @@ func (u userService) UpdateUserTelegram(userID uuid.UUID, telegram *string) erro
 		})
 	}
 
+	// тута кричим, что юзер обновлен
 	return u.eventDispatcher.Dispatch(&model.UserUpdated{
 		UserID:    userID,
 		UpdatedAt: currentTime,
@@ -233,6 +238,7 @@ func (u userService) DeleteUser(userID uuid.UUID, hard bool) error {
 		return err
 	}
 
+	// тута кричим, что юзер удален
 	return u.eventDispatcher.Dispatch(&model.UserDeleted{
 		UserID:    userID,
 		Status:    model.Deleted,

@@ -60,6 +60,8 @@ func (s *orderService) CreateOrder(userID uuid.UUID, items []model.OrderItem) (u
 		return uuid.Nil, err
 	}
 
+	// орем, что заказ создан
+
 	return orderID, s.eventDispatcher.Dispatch(&model.OrderCreated{
 		OrderID:    orderID,
 		UserID:     userID,
@@ -99,7 +101,7 @@ func (s *orderService) CancelOrder(orderID uuid.UUID, reason string) error {
 	}
 
 	if order.Status == model.StatusCancelled || order.Status == model.StatusPaid {
-		return nil // Нельзя отменить уже оплаченный или отмененный заказ
+		return nil
 	}
 
 	order.Status = model.StatusCancelled
@@ -108,6 +110,8 @@ func (s *orderService) CancelOrder(orderID uuid.UUID, reason string) error {
 	if err := s.orderRepository.Store(*order); err != nil {
 		return err
 	}
+
+	// орем, что заказ отменен
 
 	return s.eventDispatcher.Dispatch(&model.OrderCancelled{
 		OrderID:     orderID,

@@ -48,20 +48,38 @@ func messageHandler(logger logging.Logger) *cli.Command {
 
 			amqpConnection := newAMQPConnection(cnf.AMQP, logger)
 
+			queueConfig := &amqp.QueueConfig{
+				Name:    "order_events",
+				Durable: true,
+			}
+			bindConfig := &amqp.BindConfig{
+				QueueName:    "order_events",
+				ExchangeName: integrationevent.ExchangeName,
+				RoutingKeys:  []string{"user.*", "product.*"},
+			}
+
 			amqpEventProducer := amqpConnection.Producer(
 				&amqp.ExchangeConfig{
 					Name:    integrationevent.ExchangeName,
 					Kind:    integrationevent.ExchangeKind,
 					Durable: true,
 				},
-				nil,
-				nil,
+				queueConfig,
+				bindConfig,
 			)
 
 			eventConsumer, err := consumer.NewEventConsumer(c.Context, amqpConnection, databaseConnectionPool, logger)
 			if err != nil {
 				return err
 			}
+
+			amqpConnection.Consumer(
+				c.Context,
+				eventConsumer.Handler(),
+				queueConfig,
+				bindConfig,
+				nil,
+			)
 
 			err = amqpConnection.Start()
 			if err != nil {
@@ -80,24 +98,17 @@ func messageHandler(logger logging.Logger) *cli.Command {
 
 			errGroup := errgroup.Group{}
 
-			// Start Outbox
 			errGroup.Go(func() error {
 				return outboxEventHandler.Start(c.Context)
 			})
 
-			// Start Consumers
-			errGroup.Go(func() error {
-				return eventConsumer.Start()
-			})
-
-			// Start Healthcheck Server
 			errGroup.Go(func() error {
 				router := mux.NewRouter()
 				registerHealthcheck(router)
 				server := http.Server{
 					Addr:              cnf.Service.HTTPAddress,
 					Handler:           router,
-					ReadHeaderTimeout: 5 * time.Second, // ИЗМЕНЕНИЕ ЗДЕСЬ
+					ReadHeaderTimeout: 5 * time.Second,
 				}
 				graceCallback(c.Context, logger, cnf.Service.GracePeriod, server.Shutdown)
 				return server.ListenAndServe()

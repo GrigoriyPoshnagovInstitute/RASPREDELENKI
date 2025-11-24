@@ -6,6 +6,8 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
+// шеф выполняет когда юзер удален
+
 func UserDeletedWorkflow(ctx workflow.Context, userID string) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting UserDeletedWorkflow", "UserID", userID)

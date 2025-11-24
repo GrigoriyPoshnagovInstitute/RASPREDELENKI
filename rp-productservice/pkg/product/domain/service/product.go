@@ -61,6 +61,7 @@ func (s *productService) CreateProduct(name string, price int64, description *st
 		return uuid.Nil, err
 	}
 
+	// кричим, что продукт создан
 	return productID, s.eventDispatcher.Dispatch(&model.ProductCreated{
 		ProductID:   productID,
 		Name:        name,
@@ -101,6 +102,7 @@ func (s *productService) UpdateProduct(productID uuid.UUID, name string, price i
 		return err
 	}
 
+	// кричим, что продукт обновлен
 	return s.eventDispatcher.Dispatch(&model.ProductUpdated{
 		ProductID: productID,
 		UpdatedFields: struct {

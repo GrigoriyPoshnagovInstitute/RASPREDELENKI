@@ -11,6 +11,8 @@ import (
 	"userservice/pkg/user/infrastructure/temporal/activity"
 )
 
+// запускаем когда юзер обновляется
+
 var userServiceActivities *activity.UserServiceActivities
 
 func UserUpdatedWorkflow(ctx workflow.Context, event model.UserUpdated) error {
