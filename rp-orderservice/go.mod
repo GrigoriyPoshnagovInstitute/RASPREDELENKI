@@ -8,7 +8,6 @@ require (
 	gitea.xscloud.ru/xscloud/golib v1.2.2
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.7.4
-	github.com/jmoiron/sqlx v1.4.0
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.10.0
@@ -25,6 +24,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
+	github.com/jmoiron/sqlx v1.4.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rabbitmq/amqp091-go v1.10.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect

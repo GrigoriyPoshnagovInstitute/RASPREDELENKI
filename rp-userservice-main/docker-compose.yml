@@ -34,6 +34,7 @@ services:
       USER_DATABASE_PASSWORD: 12345Q
 
       USER_AMQP_HOST: userservice-rmq
+      USER_AMQP_PORT: 5672
       USER_AMQP_USER: guest
       USER_AMQP_PASSWORD: guest
     depends_on:

@@ -6,7 +6,6 @@ import (
 
 	"gitea.xscloud.ru/xscloud/golib/pkg/infrastructure/mysql"
 	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 
 	"orderservice/pkg/order/domain/model"
@@ -34,7 +33,7 @@ func (r *localProductRepository) Store(product model.LocalProduct) error {
 }
 
 func (r *localProductRepository) Find(productID uuid.UUID) (*model.LocalProduct, error) {
-	var product model.LocalProduct
+	var product sqlxProduct
 	err := r.client.GetContext(r.ctx, &product, `SELECT product_id, name, price FROM local_product WHERE product_id = ?`, productID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -42,7 +41,11 @@ func (r *localProductRepository) Find(productID uuid.UUID) (*model.LocalProduct,
 		}
 		return nil, errors.WithStack(err)
 	}
-	return &product, nil
+	return &model.LocalProduct{
+		ProductID: product.ProductID,
+		Name:      product.Name,
+		Price:     product.Price,
+	}, nil
 }
 
 func (r *localProductRepository) FindMany(productIDs []uuid.UUID) ([]model.LocalProduct, error) {
@@ -50,22 +53,31 @@ func (r *localProductRepository) FindMany(productIDs []uuid.UUID) ([]model.Local
 		return nil, nil
 	}
 
-	query, args, err := sqlx.In(`SELECT product_id, name, price FROM local_product WHERE product_id IN (?)`, productIDs)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	querier, ok := r.client.(sqlx.ExtContext)
-	if !ok {
-		return nil, errors.New("client does not implement sqlx.ExtContext")
-	}
-	query = querier.Rebind(query)
-
 	var products []model.LocalProduct
-	err = r.client.SelectContext(r.ctx, &products, query, args...)
-	if err != nil {
-		return nil, errors.WithStack(err)
+
+	for _, productID := range productIDs {
+		var product sqlxProduct
+		err := r.client.GetContext(r.ctx, &product,
+			`SELECT product_id, name, price FROM local_product WHERE product_id = ?`,
+			productID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				continue
+			}
+			return nil, errors.WithStack(err)
+		}
+		products = append(products, model.LocalProduct{
+			ProductID: product.ProductID,
+			Name:      product.Name,
+			Price:     product.Price,
+		})
 	}
 
 	return products, nil
+}
+
+type sqlxProduct struct {
+	ProductID uuid.UUID `db:"product_id"`
+	Name      string    `db:"name"`
+	Price     int64     `db:"price"`
 }

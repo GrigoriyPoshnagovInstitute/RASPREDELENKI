@@ -7,7 +7,6 @@ import (
 
 	"gitea.xscloud.ru/xscloud/golib/pkg/infrastructure/mysql"
 	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 
 	"orderservice/pkg/order/domain/model"
@@ -30,12 +29,7 @@ func (r *orderRepository) NextID() (uuid.UUID, error) {
 }
 
 func (r *orderRepository) Store(order model.Order) error {
-	tx, ok := r.client.(sqlx.ExtContext)
-	if !ok {
-		return errors.New("client does not support transactions")
-	}
-
-	_, err := tx.ExecContext(r.ctx,
+	_, err := r.client.ExecContext(r.ctx,
 		"INSERT INTO `order` (order_id, user_id, total_price, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) "+
 			"ON DUPLICATE KEY UPDATE total_price=VALUES(total_price), status=VALUES(status), updated_at=VALUES(updated_at)",
 		order.OrderID, order.UserID, order.TotalPrice, order.Status, order.CreatedAt, order.UpdatedAt,
@@ -44,21 +38,16 @@ func (r *orderRepository) Store(order model.Order) error {
 		return errors.WithStack(err)
 	}
 
-	_, err = tx.ExecContext(r.ctx, `DELETE FROM order_item WHERE order_id = ?`, order.OrderID)
+	_, err = r.client.ExecContext(r.ctx, `DELETE FROM order_item WHERE order_id = ?`, order.OrderID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	if len(order.Items) > 0 {
-		query, args, err := sqlx.In(
-			`INSERT INTO order_item (order_id, product_id, quantity, price) VALUES ?`,
-			r.toItemArgs(order),
+	for _, item := range order.Items {
+		_, err = r.client.ExecContext(r.ctx,
+			`INSERT INTO order_item (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)`,
+			order.OrderID, item.ProductID, item.Quantity, item.Price,
 		)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		query = tx.Rebind(query)
-		_, err = tx.ExecContext(r.ctx, query, args...)
 		if err != nil {
 			return errors.WithStack(err)
 		}

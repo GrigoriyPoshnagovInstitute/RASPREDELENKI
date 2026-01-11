@@ -310,15 +310,20 @@ services:
     container_name: userservice-rmq
     hostname: userservice-rmq
     ports:
+      - "5673:5672"
       - "15672:15672"
-      - "5672:5672"
     volumes:
-      - "userservice-rmq-data:/var/lib/rabbitmq/mnesia"
+      - "userservice-rmq-data:/var/lib/rabbitmq"
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     healthcheck:
-      test: rabbitmq-diagnostics -q ping
-      interval: 1s
-      timeout: 3s
-      retries: 30
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
 
   userservice-temporal:
     container_name: userservice-temporal

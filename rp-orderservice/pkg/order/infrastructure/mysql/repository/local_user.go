@@ -32,7 +32,7 @@ func (r *localUserRepository) Store(user model.LocalUser) error {
 }
 
 func (r *localUserRepository) Find(userID uuid.UUID) (*model.LocalUser, error) {
-	var user model.LocalUser
+	var user sqlxLocalUser
 	err := r.client.GetContext(r.ctx, &user, `SELECT user_id, login FROM local_user WHERE user_id = ?`, userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -40,5 +40,13 @@ func (r *localUserRepository) Find(userID uuid.UUID) (*model.LocalUser, error) {
 		}
 		return nil, errors.WithStack(err)
 	}
-	return &user, nil
+	return &model.LocalUser{
+		UserID: user.UserID,
+		Login:  user.Login,
+	}, nil
+}
+
+type sqlxLocalUser struct {
+	UserID uuid.UUID `db:"user_id"`
+	Login  string    `db:"login"`
 }
