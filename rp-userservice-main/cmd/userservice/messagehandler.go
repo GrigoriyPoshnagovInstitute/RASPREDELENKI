@@ -36,9 +36,7 @@ func messageHandler(logger logging.Logger) *cli.Command {
 			}
 
 			closer := libio.NewMultiCloser()
-			defer func() {
-				_ = closer.Close()
-			}()
+			defer func() { _ = closer.Close() }()
 
 			databaseConnector, err := newDatabaseConnector(cnf.Database)
 			if err != nil {
@@ -57,58 +55,51 @@ func messageHandler(logger logging.Logger) *cli.Command {
 			}))
 			workflowService := temporal.NewWorkflowService(temporalClient)
 
+			amqpConnection := newAMQPConnection(cnf.AMQP, logger)
+
+			amqpEventProducer := amqpConnection.Producer(
+				&amqp.ExchangeConfig{
+					Name:    integrationevent.ExchangeName,
+					Kind:    integrationevent.ExchangeKind,
+					Durable: true,
+				},
+				nil,
+				nil,
+			)
+
 			libUoW := mysql.NewUnitOfWork(databaseConnectionPool, inframysql.NewRepositoryProvider)
 			libLUow := mysql.NewLockableUnitOfWork(libUoW, mysql.NewLocker(databaseConnectionPool))
 			uow := inframysql.NewUnitOfWork(libUoW)
 			luow := inframysql.NewLockableUnitOfWork(libLUow)
 
-			eventDispatcher := outbox.NewEventDispatcher(appID, integrationevent.TransportName, integrationevent.NewEventSerializer(), libUoW)
-			userService := appservice.NewUserService(uow, luow, eventDispatcher)
-
-			amqpConnection := newAMQPConnection(cnf.AMQP, logger)
-
-			queueConfig := &amqp.QueueConfig{
-				Name:    integrationevent.QueueName,
-				Durable: true,
-			}
-			bindConfig := &amqp.BindConfig{
-				QueueName:    integrationevent.QueueName,
-				ExchangeName: integrationevent.ExchangeName,
-				RoutingKeys:  []string{integrationevent.RoutingKeyPrefix + "#"},
-			}
-			exchangeConfig := &amqp.ExchangeConfig{
-				Name:    integrationevent.ExchangeName,
-				Kind:    integrationevent.ExchangeKind,
-				Durable: true,
-			}
-
-			amqpEventProducer := amqpConnection.Producer(
-				exchangeConfig,
-				nil,
-				nil,
+			eventDispatcher := outbox.NewEventDispatcher(
+				appID,
+				integrationevent.TransportName,
+				integrationevent.NewEventSerializer(),
+				libUoW,
 			)
+			userService := appservice.NewUserService(uow, luow, eventDispatcher)
 
 			amqpTransport := integrationevent.NewAMQPTransport(logger, workflowService, userService)
 
-			qosConfig := &amqp.QoSConfig{
-				PrefetchCount: 10,
-			}
+			amqpConnection.Consumer(
+				c.Context,
+				amqpTransport.Handler(),
+				&amqp.QueueConfig{Name: integrationevent.QueueName, Durable: true},
+				&amqp.BindConfig{
+					QueueName:    integrationevent.QueueName,
+					ExchangeName: integrationevent.ExchangeName,
+					RoutingKeys:  []string{integrationevent.RoutingKeyPrefix + "#"},
+				},
+				nil,
+			)
 
-			err = amqpConnection.Start()
-			if err != nil {
+			if err = amqpConnection.Start(); err != nil {
 				return err
 			}
 			closer.AddCloser(libio.CloserFunc(func() error {
 				return amqpConnection.Stop()
 			}))
-
-			amqpConnection.Consumer(
-				c.Context,
-				amqpTransport.Handler(),
-				queueConfig,
-				bindConfig,
-				qosConfig,
-			)
 
 			outboxEventHandler := outbox.NewEventHandler(outbox.EventHandlerConfig{
 				TransportName:  integrationevent.TransportName,
@@ -125,7 +116,6 @@ func messageHandler(logger logging.Logger) *cli.Command {
 			errGroup.Go(func() error {
 				router := mux.NewRouter()
 				registerHealthcheck(router)
-				// nolint:gosec
 				server := http.Server{
 					Addr:    cnf.Service.HTTPAddress,
 					Handler: router,
