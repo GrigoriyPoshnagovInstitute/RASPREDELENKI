@@ -14,6 +14,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 
 	"userservice/api/server/userinternal"
 	appservice "userservice/pkg/user/application/service"
@@ -77,6 +78,7 @@ func service(logger logging.Logger) *cli.Command {
 					middlewares.NewGRPCLoggingMiddleware(logger),
 				))
 				userinternal.RegisterUserInternalServiceServer(grpcServer, userInternalAPI)
+				reflection.Register(grpcServer)
 				graceCallback(c.Context, logger, cnf.Service.GracePeriod, func(_ context.Context) error {
 					grpcServer.GracefulStop()
 					return nil

@@ -105,6 +105,7 @@ func messageHandler(logger logging.Logger) *cli.Command {
 			errGroup.Go(func() error {
 				router := mux.NewRouter()
 				registerHealthcheck(router)
+				registerMetrics(router)
 				server := http.Server{
 					Addr:              cnf.Service.HTTPAddress,
 					Handler:           router,

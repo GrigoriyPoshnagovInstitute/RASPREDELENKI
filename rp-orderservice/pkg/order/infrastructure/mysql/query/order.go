@@ -12,6 +12,7 @@ import (
 	appmodel "orderservice/pkg/order/application/model"
 	"orderservice/pkg/order/application/query"
 	"orderservice/pkg/order/domain/model"
+	"orderservice/pkg/order/infrastructure/metrics"
 )
 
 func NewOrderQueryService(client mysql.ClientContext) query.OrderQueryService {
@@ -24,7 +25,16 @@ type orderQueryService struct {
 	client mysql.ClientContext
 }
 
-func (s *orderQueryService) FindOrder(ctx context.Context, orderID uuid.UUID) (*appmodel.Order, error) {
+func (s *orderQueryService) FindOrder(ctx context.Context, orderID uuid.UUID) (_ *appmodel.Order, err error) {
+	start := time.Now()
+	defer func() {
+		status := "success"
+		if err != nil && !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, model.ErrOrderNotFound) {
+			status = "error"
+		}
+		metrics.DatabaseDuration.WithLabelValues("find_query", "order", status).Observe(time.Since(start).Seconds())
+	}()
+
 	orderData := struct {
 		OrderID    uuid.UUID `db:"order_id"`
 		UserID     uuid.UUID `db:"user_id"`
@@ -33,7 +43,7 @@ func (s *orderQueryService) FindOrder(ctx context.Context, orderID uuid.UUID) (*
 		CreatedAt  time.Time `db:"created_at"`
 	}{}
 
-	err := s.client.GetContext(ctx, &orderData, "SELECT order_id, user_id, total_price, status, created_at FROM `order` WHERE order_id = ?", orderID)
+	err = s.client.GetContext(ctx, &orderData, "SELECT order_id, user_id, total_price, status, created_at FROM `order` WHERE order_id = ?", orderID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errors.WithStack(model.ErrOrderNotFound)

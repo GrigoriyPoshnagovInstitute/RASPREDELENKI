@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 
 	"orderservice/pkg/order/domain/model"
+	"orderservice/pkg/order/infrastructure/metrics"
 )
 
 func NewOrderRepository(ctx context.Context, client mysql.ClientContext) model.OrderRepository {
@@ -28,8 +29,17 @@ func (r *orderRepository) NextID() (uuid.UUID, error) {
 	return uuid.NewV7()
 }
 
-func (r *orderRepository) Store(order model.Order) error {
-	_, err := r.client.ExecContext(r.ctx,
+func (r *orderRepository) Store(order model.Order) (err error) {
+	start := time.Now()
+	defer func() {
+		status := "success"
+		if err != nil {
+			status = "error"
+		}
+		metrics.DatabaseDuration.WithLabelValues("store", "order", status).Observe(time.Since(start).Seconds())
+	}()
+
+	_, err = r.client.ExecContext(r.ctx,
 		"INSERT INTO `order` (order_id, user_id, total_price, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) "+
 			"ON DUPLICATE KEY UPDATE total_price=VALUES(total_price), status=VALUES(status), updated_at=VALUES(updated_at)",
 		order.OrderID, order.UserID, order.TotalPrice, order.Status, order.CreatedAt, order.UpdatedAt,
@@ -56,7 +66,16 @@ func (r *orderRepository) Store(order model.Order) error {
 	return nil
 }
 
-func (r *orderRepository) Find(orderID uuid.UUID) (*model.Order, error) {
+func (r *orderRepository) Find(orderID uuid.UUID) (_ *model.Order, err error) {
+	start := time.Now()
+	defer func() {
+		status := "success"
+		if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
+			status = "error"
+		}
+		metrics.DatabaseDuration.WithLabelValues("find", "order", status).Observe(time.Since(start).Seconds())
+	}()
+
 	orderData := struct {
 		OrderID    uuid.UUID `db:"order_id"`
 		UserID     uuid.UUID `db:"user_id"`
@@ -66,7 +85,7 @@ func (r *orderRepository) Find(orderID uuid.UUID) (*model.Order, error) {
 		UpdatedAt  time.Time `db:"updated_at"`
 	}{}
 
-	err := r.client.GetContext(r.ctx, &orderData, "SELECT order_id, user_id, total_price, status, created_at, updated_at FROM `order` WHERE order_id = ?", orderID)
+	err = r.client.GetContext(r.ctx, &orderData, "SELECT order_id, user_id, total_price, status, created_at, updated_at FROM `order` WHERE order_id = ?", orderID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errors.WithStack(model.ErrOrderNotFound)

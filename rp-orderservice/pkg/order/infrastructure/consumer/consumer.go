@@ -3,6 +3,7 @@ package consumer
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"gitea.xscloud.ru/xscloud/golib/pkg/application/logging"
 	"gitea.xscloud.ru/xscloud/golib/pkg/infrastructure/amqp"
@@ -12,6 +13,7 @@ import (
 
 	appservice "orderservice/pkg/order/application/service"
 	"orderservice/pkg/order/domain/model"
+	"orderservice/pkg/order/infrastructure/metrics"
 )
 
 type EventConsumer struct {
@@ -43,7 +45,16 @@ func (c *EventConsumer) Handler() amqp.Handler {
 	return c.handle
 }
 
-func (c *EventConsumer) handle(ctx context.Context, delivery amqp.Delivery) error {
+func (c *EventConsumer) handle(ctx context.Context, delivery amqp.Delivery) (err error) {
+	start := time.Now()
+	defer func() {
+		status := "success"
+		if err != nil {
+			status = "error"
+		}
+		metrics.EventDuration.WithLabelValues(delivery.Type, status).Observe(time.Since(start).Seconds())
+	}()
+
 	l := c.logger.WithField("event_type", delivery.Type)
 	l.Info("processing event")
 
@@ -53,7 +64,7 @@ func (c *EventConsumer) handle(ctx context.Context, delivery amqp.Delivery) erro
 			UserID string `json:"user_id"`
 			Login  string `json:"login"`
 		}
-		if err := json.Unmarshal(delivery.Body, &event); err != nil {
+		if err = json.Unmarshal(delivery.Body, &event); err != nil {
 			l.Error(err, "failed to unmarshal user event")
 			return nil
 		}
@@ -80,7 +91,7 @@ func (c *EventConsumer) handle(ctx context.Context, delivery amqp.Delivery) erro
 			Name      string `json:"name"`
 			Price     int64  `json:"price"`
 		}
-		if err := json.Unmarshal(delivery.Body, &event); err != nil {
+		if err = json.Unmarshal(delivery.Body, &event); err != nil {
 			l.Error(err, "failed to unmarshal product event")
 			return nil
 		}

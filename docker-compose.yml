@@ -1,4 +1,25 @@
 services:
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+
   userservice:
     container_name: userservice
     build:
@@ -29,7 +50,6 @@ services:
       USER_DATABASE_NAME: userservice_db
       USER_DATABASE_USER: userservice
       USER_DATABASE_PASSWORD: 12345Q
-      # Вот этой переменной не хватало:
       USER_TEMPORAL_HOST: userservice-temporal:7233
     depends_on:
       userservice-db:
@@ -53,7 +73,6 @@ services:
       USER_AMQP_HOST: userservice-rmq
       USER_AMQP_USER: guest
       USER_AMQP_PASSWORD: guest
-      # И этой:
       USER_TEMPORAL_HOST: userservice-temporal:7233
     depends_on:
       userservice-db:

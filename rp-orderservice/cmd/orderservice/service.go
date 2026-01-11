@@ -15,6 +15,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 
 	"orderservice/api/server/orderinternal"
 	appservice "orderservice/pkg/order/application/service"
@@ -73,6 +74,7 @@ func service(logger logging.Logger) *cli.Command {
 					middlewares.NewGRPCLoggingMiddleware(logger),
 				))
 				orderinternal.RegisterOrderInternalServiceServer(grpcServer, orderInternalAPI)
+				reflection.Register(grpcServer)
 				graceCallback(c.Context, logger, cnf.Service.GracePeriod, func(_ context.Context) error {
 					grpcServer.GracefulStop()
 					return nil
@@ -82,6 +84,7 @@ func service(logger logging.Logger) *cli.Command {
 			errGroup.Go(func() error {
 				router := mux.NewRouter()
 				registerHealthcheck(router)
+				registerMetrics(router)
 				server := http.Server{
 					Addr:              cnf.Service.HTTPAddress,
 					Handler:           router,
