@@ -47,7 +47,7 @@ type MockUnitOfWork struct {
 	provider *MockRepositoryProvider
 }
 
-func (m *MockUnitOfWork) Execute(ctx context.Context, f func(provider RepositoryProvider) error) error {
+func (m *MockUnitOfWork) Execute(_ context.Context, f func(provider RepositoryProvider) error) error {
 	return f(m.provider)
 }
 
@@ -55,7 +55,7 @@ type StubLocalUserRepo struct {
 	mock.Mock
 }
 
-func (m *StubLocalUserRepo) Store(u domainmodel.LocalUser) error { return nil }
+func (m *StubLocalUserRepo) Store(_ domainmodel.LocalUser) error { return nil }
 func (m *StubLocalUserRepo) Find(id uuid.UUID) (*domainmodel.LocalUser, error) {
 	args := m.Called(id)
 	if args.Get(0) == nil {
@@ -68,8 +68,8 @@ type StubLocalProductRepo struct {
 	mock.Mock
 }
 
-func (m *StubLocalProductRepo) Store(p domainmodel.LocalProduct) error               { return nil }
-func (m *StubLocalProductRepo) Find(id uuid.UUID) (*domainmodel.LocalProduct, error) { return nil, nil }
+func (m *StubLocalProductRepo) Store(_ domainmodel.LocalProduct) error              { return nil }
+func (m *StubLocalProductRepo) Find(_ uuid.UUID) (*domainmodel.LocalProduct, error) { return nil, nil }
 func (m *StubLocalProductRepo) FindMany(ids []uuid.UUID) ([]domainmodel.LocalProduct, error) {
 	args := m.Called(ids)
 	if args.Get(0) == nil {
@@ -92,7 +92,7 @@ func (m *StubOrderRepo) Store(o domainmodel.Order) error {
 	return args.Error(0)
 }
 
-func (m *StubOrderRepo) Find(id uuid.UUID) (*domainmodel.Order, error) { return nil, nil }
+func (m *StubOrderRepo) Find(_ uuid.UUID) (*domainmodel.Order, error) { return nil, nil }
 
 func TestOrderAppService_CreateOrder(t *testing.T) {
 	provider := new(MockRepositoryProvider)
@@ -137,4 +137,4 @@ func TestOrderAppService_CreateOrder(t *testing.T) {
 
 type DummyDispatcher struct{}
 
-func (d *DummyDispatcher) Dispatch(ctx context.Context, event outbox.Event) error { return nil }
+func (d *DummyDispatcher) Dispatch(_ context.Context, _ outbox.Event) error { return nil }

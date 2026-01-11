@@ -76,7 +76,7 @@ func (a *orderInternalAPI) FindOrder(ctx context.Context, request *orderinternal
 	for i, item := range order.Items {
 		items[i] = &orderinternal.OrderItem{
 			ProductID: item.ProductID.String(),
-			Quantity:  int32(item.Quantity),
+			Quantity:  int32(item.Quantity), // nolint:gosec
 		}
 	}
 

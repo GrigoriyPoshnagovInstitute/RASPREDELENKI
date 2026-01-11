@@ -103,11 +103,3 @@ func (r *orderRepository) Find(orderID uuid.UUID) (*model.Order, error) {
 		UpdatedAt:  orderData.UpdatedAt,
 	}, nil
 }
-
-func (r *orderRepository) toItemArgs(order model.Order) [][]interface{} {
-	args := make([][]interface{}, len(order.Items))
-	for i, item := range order.Items {
-		args[i] = []interface{}{order.OrderID, item.ProductID, item.Quantity, item.Price}
-	}
-	return args
-}

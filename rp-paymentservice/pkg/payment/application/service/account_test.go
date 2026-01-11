@@ -54,7 +54,7 @@ func (m *StubAccountRepo) Find(s domainmodel.FindSpec) (*domainmodel.Account, er
 
 type DummyDispatcher struct{}
 
-func (d *DummyDispatcher) Dispatch(ctx context.Context, event outbox.Event) error {
+func (d *DummyDispatcher) Dispatch(_ context.Context, _ outbox.Event) error {
 	return nil
 }
 

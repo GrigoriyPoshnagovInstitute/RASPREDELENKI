@@ -53,7 +53,7 @@ func (r *localProductRepository) FindMany(productIDs []uuid.UUID) ([]model.Local
 		return nil, nil
 	}
 
-	var products []model.LocalProduct
+	products := make([]model.LocalProduct, 0, len(productIDs))
 
 	for _, productID := range productIDs {
 		var product sqlxProduct

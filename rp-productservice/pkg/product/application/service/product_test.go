@@ -53,13 +53,13 @@ func (m *StubProductRepo) Find(s domainmodel.FindSpec) (*domainmodel.Product, er
 	return args.Get(0).(*domainmodel.Product), args.Error(1)
 }
 
-func (m *StubProductRepo) Delete(id uuid.UUID) error {
+func (m *StubProductRepo) Delete(_ uuid.UUID) error {
 	return nil
 }
 
 type DummyDispatcher struct{}
 
-func (d *DummyDispatcher) Dispatch(ctx context.Context, event outbox.Event) error {
+func (d *DummyDispatcher) Dispatch(_ context.Context, _ outbox.Event) error {
 	return nil
 }
 
