@@ -11,6 +11,12 @@ import (
 	"github.com/pkg/errors"
 
 	"paymentservice/pkg/payment/domain/model"
+	"paymentservice/pkg/payment/infrastructure/metrics"
+)
+
+const (
+	statusSuccess = "success"
+	statusError   = "error"
 )
 
 func NewAccountRepository(ctx context.Context, client mysql.ClientContext) model.AccountRepository {
@@ -29,8 +35,17 @@ func (p *accountRepository) NextID(userID uuid.UUID) uuid.UUID {
 	return userID
 }
 
-func (p *accountRepository) Store(account model.Account) error {
-	_, err := p.client.ExecContext(p.ctx,
+func (p *accountRepository) Store(account model.Account) (err error) {
+	start := time.Now()
+	defer func() {
+		status := statusSuccess
+		if err != nil {
+			status = statusError
+		}
+		metrics.DatabaseDuration.WithLabelValues("store", "account", status).Observe(time.Since(start).Seconds())
+	}()
+
+	_, err = p.client.ExecContext(p.ctx,
 		`
 	INSERT INTO account (user_id, balance, created_at, updated_at) VALUES (?, ?, ?, ?)
 	ON DUPLICATE KEY UPDATE
@@ -45,7 +60,16 @@ func (p *accountRepository) Store(account model.Account) error {
 	return errors.WithStack(err)
 }
 
-func (p *accountRepository) Find(spec model.FindSpec) (*model.Account, error) {
+func (p *accountRepository) Find(spec model.FindSpec) (_ *model.Account, err error) {
+	start := time.Now()
+	defer func() {
+		status := statusSuccess
+		if err != nil && !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, model.ErrAccountNotFound) {
+			status = statusError
+		}
+		metrics.DatabaseDuration.WithLabelValues("find", "account", status).Observe(time.Since(start).Seconds())
+	}()
+
 	account := struct {
 		UserID    uuid.UUID `db:"user_id"`
 		Balance   int64     `db:"balance"`
@@ -54,7 +78,7 @@ func (p *accountRepository) Find(spec model.FindSpec) (*model.Account, error) {
 	}{}
 	query, args := p.buildSpecArgs(spec)
 
-	err := p.client.GetContext(
+	err = p.client.GetContext(
 		p.ctx,
 		&account,
 		`SELECT user_id, balance, created_at, updated_at FROM account WHERE `+query,

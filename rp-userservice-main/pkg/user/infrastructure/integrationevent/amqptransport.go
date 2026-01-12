@@ -12,6 +12,7 @@ import (
 
 	"userservice/pkg/user/application/service"
 	"userservice/pkg/user/domain/model"
+	"userservice/pkg/user/infrastructure/metrics"
 	"userservice/pkg/user/infrastructure/temporal"
 )
 
@@ -103,7 +104,16 @@ func (t *amqpTransport) handle(ctx context.Context, delivery amqp.Delivery) erro
 }
 
 func (t *amqpTransport) withLog(handler amqp.Handler) amqp.Handler {
-	return func(ctx context.Context, delivery amqp.Delivery) error {
+	return func(ctx context.Context, delivery amqp.Delivery) (err error) {
+		start := time.Now()
+		defer func() {
+			status := "success"
+			if err != nil && !errors.Is(err, errUnhandledDelivery) && !errors.Is(err, errProcessed) {
+				status = "error"
+			}
+			metrics.EventDuration.WithLabelValues(delivery.Type, status).Observe(time.Since(start).Seconds())
+		}()
+
 		l := t.logger.WithFields(logging.Fields{
 			"routing_key":    delivery.RoutingKey,
 			"correlation_id": delivery.CorrelationID,
@@ -117,9 +127,8 @@ func (t *amqpTransport) withLog(handler amqp.Handler) amqp.Handler {
 		}
 
 		l = l.WithField("body", json.RawMessage(delivery.Body))
-		start := time.Now()
 
-		err := handler(ctx, delivery)
+		err = handler(ctx, delivery)
 
 		l = l.WithField("duration", time.Since(start))
 

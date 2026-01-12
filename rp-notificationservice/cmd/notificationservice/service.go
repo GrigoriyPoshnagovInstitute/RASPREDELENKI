@@ -13,6 +13,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 
 	"notificationservice/api/server/notificationinternal"
 	"notificationservice/pkg/notification/infrastructure/mysql/query"
@@ -60,6 +61,7 @@ func service(logger logging.Logger) *cli.Command {
 					middlewares.NewGRPCLoggingMiddleware(logger),
 				))
 				notificationinternal.RegisterNotificationInternalServiceServer(grpcServer, notificationAPI)
+				reflection.Register(grpcServer)
 				graceCallback(c.Context, logger, cnf.Service.GracePeriod, func(_ context.Context) error {
 					grpcServer.GracefulStop()
 					return nil
@@ -69,6 +71,7 @@ func service(logger logging.Logger) *cli.Command {
 			errGroup.Go(func() error {
 				router := mux.NewRouter()
 				registerHealthcheck(router)
+				registerMetrics(router)
 				server := http.Server{
 					Addr:              cnf.Service.HTTPAddress,
 					Handler:           router,

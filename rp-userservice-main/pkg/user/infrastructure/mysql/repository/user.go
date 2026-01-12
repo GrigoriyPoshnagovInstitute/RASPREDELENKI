@@ -11,6 +11,12 @@ import (
 	"github.com/pkg/errors"
 
 	"userservice/pkg/user/domain/model"
+	"userservice/pkg/user/infrastructure/metrics"
+)
+
+const (
+	statusSuccess = "success"
+	statusError   = "error"
 )
 
 func NewUserRepository(ctx context.Context, client mysql.ClientContext) model.UserRepository {
@@ -29,8 +35,17 @@ func (u *userRepository) NextID() (uuid.UUID, error) {
 	return uuid.NewV7()
 }
 
-func (u *userRepository) Store(user model.User) error {
-	_, err := u.client.ExecContext(u.ctx,
+func (u *userRepository) Store(user model.User) (err error) {
+	start := time.Now()
+	defer func() {
+		status := statusSuccess
+		if err != nil {
+			status = statusError
+		}
+		metrics.DatabaseDuration.WithLabelValues("store", "user", status).Observe(time.Since(start).Seconds())
+	}()
+
+	_, err = u.client.ExecContext(u.ctx,
 		`
 	INSERT INTO user (user_id, status, login, email, telegram, created_at, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	ON DUPLICATE KEY UPDATE
@@ -53,7 +68,16 @@ func (u *userRepository) Store(user model.User) error {
 	return errors.WithStack(err)
 }
 
-func (u *userRepository) Find(spec model.FindSpec) (*model.User, error) {
+func (u *userRepository) Find(spec model.FindSpec) (_ *model.User, err error) {
+	start := time.Now()
+	defer func() {
+		status := statusSuccess
+		if err != nil && !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, model.ErrUserNotFound) {
+			status = statusError
+		}
+		metrics.DatabaseDuration.WithLabelValues("find", "user", status).Observe(time.Since(start).Seconds())
+	}()
+
 	user := struct {
 		UserID    uuid.UUID           `db:"user_id"`
 		Status    int                 `db:"status"`
@@ -66,7 +90,7 @@ func (u *userRepository) Find(spec model.FindSpec) (*model.User, error) {
 	}{}
 	query, args := u.buildSpecArgs(spec)
 
-	err := u.client.GetContext(
+	err = u.client.GetContext(
 		u.ctx,
 		&user,
 		`SELECT user_id, status, login, email, telegram, created_at, updated_at, deleted_at FROM user WHERE `+query,
@@ -91,8 +115,17 @@ func (u *userRepository) Find(spec model.FindSpec) (*model.User, error) {
 	}, nil
 }
 
-func (u *userRepository) HardDelete(userID uuid.UUID) error {
-	_, err := u.client.ExecContext(u.ctx, `DELETE FROM user WHERE user_id = ?`, userID)
+func (u *userRepository) HardDelete(userID uuid.UUID) (err error) {
+	start := time.Now()
+	defer func() {
+		status := statusSuccess
+		if err != nil {
+			status = statusError
+		}
+		metrics.DatabaseDuration.WithLabelValues("delete", "user", status).Observe(time.Since(start).Seconds())
+	}()
+
+	_, err = u.client.ExecContext(u.ctx, `DELETE FROM user WHERE user_id = ?`, userID)
 	return errors.WithStack(err)
 }
 

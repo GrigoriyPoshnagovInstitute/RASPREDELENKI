@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"gitea.xscloud.ru/xscloud/golib/pkg/infrastructure/mysql"
 	"github.com/google/uuid"
@@ -11,6 +12,7 @@ import (
 	appmodel "userservice/pkg/user/application/model"
 	"userservice/pkg/user/application/query"
 	"userservice/pkg/user/domain/model"
+	"userservice/pkg/user/infrastructure/metrics"
 )
 
 func NewUserQueryService(client mysql.ClientContext) query.UserQueryService {
@@ -23,7 +25,16 @@ type userQueryService struct {
 	client mysql.ClientContext
 }
 
-func (u *userQueryService) FindUser(ctx context.Context, userID uuid.UUID) (*appmodel.User, error) {
+func (u *userQueryService) FindUser(ctx context.Context, userID uuid.UUID) (_ *appmodel.User, err error) {
+	start := time.Now()
+	defer func() {
+		status := "success"
+		if err != nil && !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, model.ErrUserNotFound) {
+			status = "error"
+		}
+		metrics.DatabaseDuration.WithLabelValues("find_query", "user", status).Observe(time.Since(start).Seconds())
+	}()
+
 	user := struct {
 		UserID   uuid.UUID        `db:"user_id"`
 		Status   int              `db:"status"`
@@ -32,7 +43,7 @@ func (u *userQueryService) FindUser(ctx context.Context, userID uuid.UUID) (*app
 		Telegram sql.Null[string] `db:"telegram"`
 	}{}
 
-	err := u.client.GetContext(
+	err = u.client.GetContext(
 		ctx,
 		&user,
 		`SELECT user_id, status, login, email, telegram FROM user WHERE user_id = ?`,

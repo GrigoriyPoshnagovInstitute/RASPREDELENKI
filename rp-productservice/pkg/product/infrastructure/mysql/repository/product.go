@@ -11,6 +11,12 @@ import (
 	"github.com/pkg/errors"
 
 	"productservice/pkg/product/domain/model"
+	"productservice/pkg/product/infrastructure/metrics"
+)
+
+const (
+	statusSuccess = "success"
+	statusError   = "error"
 )
 
 func NewProductRepository(ctx context.Context, client mysql.ClientContext) model.ProductRepository {
@@ -29,8 +35,17 @@ func (p *productRepository) NextID() (uuid.UUID, error) {
 	return uuid.NewV7()
 }
 
-func (p *productRepository) Store(product model.Product) error {
-	_, err := p.client.ExecContext(p.ctx,
+func (p *productRepository) Store(product model.Product) (err error) {
+	start := time.Now()
+	defer func() {
+		status := statusSuccess
+		if err != nil {
+			status = statusError
+		}
+		metrics.DatabaseDuration.WithLabelValues("store", "product", status).Observe(time.Since(start).Seconds())
+	}()
+
+	_, err = p.client.ExecContext(p.ctx,
 		`
 	INSERT INTO product (product_id, name, description, price, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
 	ON DUPLICATE KEY UPDATE
@@ -49,7 +64,16 @@ func (p *productRepository) Store(product model.Product) error {
 	return errors.WithStack(err)
 }
 
-func (p *productRepository) Find(spec model.FindSpec) (*model.Product, error) {
+func (p *productRepository) Find(spec model.FindSpec) (_ *model.Product, err error) {
+	start := time.Now()
+	defer func() {
+		status := statusSuccess
+		if err != nil && !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, model.ErrProductNotFound) {
+			status = statusError
+		}
+		metrics.DatabaseDuration.WithLabelValues("find", "product", status).Observe(time.Since(start).Seconds())
+	}()
+
 	product := struct {
 		ProductID   uuid.UUID        `db:"product_id"`
 		Name        string           `db:"name"`
@@ -60,7 +84,7 @@ func (p *productRepository) Find(spec model.FindSpec) (*model.Product, error) {
 	}{}
 	query, args := p.buildSpecArgs(spec)
 
-	err := p.client.GetContext(
+	err = p.client.GetContext(
 		p.ctx,
 		&product,
 		`SELECT product_id, name, description, price, created_at, updated_at FROM product WHERE `+query,
@@ -83,8 +107,17 @@ func (p *productRepository) Find(spec model.FindSpec) (*model.Product, error) {
 	}, nil
 }
 
-func (p *productRepository) Delete(productID uuid.UUID) error {
-	_, err := p.client.ExecContext(p.ctx, `DELETE FROM product WHERE product_id = ?`, productID)
+func (p *productRepository) Delete(productID uuid.UUID) (err error) {
+	start := time.Now()
+	defer func() {
+		status := statusSuccess
+		if err != nil {
+			status = statusError
+		}
+		metrics.DatabaseDuration.WithLabelValues("delete", "product", status).Observe(time.Since(start).Seconds())
+	}()
+
+	_, err = p.client.ExecContext(p.ctx, `DELETE FROM product WHERE product_id = ?`, productID)
 	return errors.WithStack(err)
 }
 

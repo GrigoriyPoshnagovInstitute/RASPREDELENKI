@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"gitea.xscloud.ru/xscloud/golib/pkg/infrastructure/mysql"
 	"github.com/google/uuid"
@@ -11,6 +12,7 @@ import (
 	appmodel "productservice/pkg/product/application/model"
 	"productservice/pkg/product/application/query"
 	"productservice/pkg/product/domain/model"
+	"productservice/pkg/product/infrastructure/metrics"
 )
 
 func NewProductQueryService(client mysql.ClientContext) query.ProductQueryService {
@@ -23,7 +25,16 @@ type productQueryService struct {
 	client mysql.ClientContext
 }
 
-func (p *productQueryService) FindProduct(ctx context.Context, productID uuid.UUID) (*appmodel.Product, error) {
+func (p *productQueryService) FindProduct(ctx context.Context, productID uuid.UUID) (_ *appmodel.Product, err error) {
+	start := time.Now()
+	defer func() {
+		status := "success"
+		if err != nil && !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, model.ErrProductNotFound) {
+			status = "error"
+		}
+		metrics.DatabaseDuration.WithLabelValues("find_query", "product", status).Observe(time.Since(start).Seconds())
+	}()
+
 	product := struct {
 		ProductID   uuid.UUID        `db:"product_id"`
 		Name        string           `db:"name"`
@@ -31,10 +42,10 @@ func (p *productQueryService) FindProduct(ctx context.Context, productID uuid.UU
 		Price       int64            `db:"price"`
 	}{}
 
-	err := p.client.GetContext(
+	err = p.client.GetContext(
 		ctx,
 		&product,
-		`SELECT product_id, name, description, price FROM product.go WHERE product_id = ?`,
+		`SELECT product_id, name, description, price FROM product WHERE product_id = ?`,
 		productID,
 	)
 	if err != nil {

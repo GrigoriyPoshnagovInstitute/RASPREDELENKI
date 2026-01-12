@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"gitea.xscloud.ru/xscloud/golib/pkg/application/logging"
 	"gitea.xscloud.ru/xscloud/golib/pkg/infrastructure/amqp"
@@ -12,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 
 	appservice "notificationservice/pkg/notification/application/service"
+	"notificationservice/pkg/notification/infrastructure/metrics"
 )
 
 type EventConsumer struct {
@@ -41,11 +43,19 @@ func (c *EventConsumer) Handler() amqp.Handler {
 	return c.handle
 }
 
-func (c *EventConsumer) handle(ctx context.Context, delivery amqp.Delivery) error {
+func (c *EventConsumer) handle(ctx context.Context, delivery amqp.Delivery) (err error) {
+	start := time.Now()
+	defer func() {
+		status := "success"
+		if err != nil {
+			status = "error"
+		}
+		metrics.EventDuration.WithLabelValues(delivery.Type, status).Observe(time.Since(start).Seconds())
+	}()
+
 	l := c.logger.WithField("event_type", delivery.Type)
 	l.Info("processing event")
 
-	var err error
 	var orderID, userID uuid.UUID
 	var message string
 
