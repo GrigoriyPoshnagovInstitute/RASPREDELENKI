@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: paymentservice
+  labels:
+    app: paymentservice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: paymentservice
+  template:
+    metadata:
+      labels:
+        app: paymentservice
+    spec:
+      initContainers:
+        - name: migrator
+          image: paymentservice:latest
+          imagePullPolicy: Never
+          command: ["/app/paymentservice", "migrate", "database"]
+          env:
+            - name: PAYMENT_DATABASE_HOST
+              value: mysql.infrastructure.svc.cluster.local:3306
+            - name: PAYMENT_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: paymentservice-db-secret
+                  key: DB_NAME
+            - name: PAYMENT_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: paymentservice-db-secret
+                  key: DB_USER
+            - name: PAYMENT_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: paymentservice-db-secret
+                  key: DB_PASSWORD
+      containers:
+        - name: service
+          image: paymentservice:latest
+          imagePullPolicy: Never
+          command: ["/app/paymentservice", "service"]
+          ports:
+            - containerPort: 8081
+            - containerPort: 8082
+          env:
+            - name: PAYMENT_GRPC_ADDRESS
+              value: ":8081"
+            - name: PAYMENT_HTTP_ADDRESS
+              value: ":8082"
+            - name: PAYMENT_DATABASE_HOST
+              value: mysql.infrastructure.svc.cluster.local:3306
+            - name: PAYMENT_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: paymentservice-db-secret
+                  key: DB_NAME
+            - name: PAYMENT_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: paymentservice-db-secret
+                  key: DB_USER
+            - name: PAYMENT_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: paymentservice-db-secret
+                  key: DB_PASSWORD
+        - name: message-handler
+          image: paymentservice:latest
+          imagePullPolicy: Never
+          command: ["/app/paymentservice", "message-handler"]
+          env:
+            - name: PAYMENT_HTTP_ADDRESS
+              value: ":8083"
+            - name: PAYMENT_DATABASE_HOST
+              value: mysql.infrastructure.svc.cluster.local:3306
+            - name: PAYMENT_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: paymentservice-db-secret
+                  key: DB_NAME
+            - name: PAYMENT_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: paymentservice-db-secret
+                  key: DB_USER
+            - name: PAYMENT_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: paymentservice-db-secret
+                  key: DB_PASSWORD
+            - name: PAYMENT_AMQP_HOST
+              value: rabbitmq.infrastructure.svc.cluster.local:5672
+            - name: PAYMENT_AMQP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-app-secret
+                  key: AMQP_USER
+            - name: PAYMENT_AMQP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-app-secret
+                  key: AMQP_PASSWORD
+        - name: workflow-worker
+          image: paymentservice:latest
+          imagePullPolicy: Never
+          command: ["/app/paymentservice", "workflow-worker"]
+          env:
+            - name: PAYMENT_HTTP_ADDRESS
+              value: ":8084"
+            - name: PAYMENT_DATABASE_HOST
+              value: mysql.infrastructure.svc.cluster.local:3306
+            - name: PAYMENT_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: paymentservice-db-secret
+                  key: DB_NAME
+            - name: PAYMENT_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: paymentservice-db-secret
+                  key: DB_USER
+            - name: PAYMENT_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: paymentservice-db-secret
+                  key: DB_PASSWORD
+            - name: PAYMENT_TEMPORAL_HOST
+              value: temporal.infrastructure.svc.cluster.local:7233

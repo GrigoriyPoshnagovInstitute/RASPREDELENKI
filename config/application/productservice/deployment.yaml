@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: productservice
+  labels:
+    app: productservice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: productservice
+  template:
+    metadata:
+      labels:
+        app: productservice
+    spec:
+      initContainers:
+        - name: migrator
+          image: productservice:latest
+          imagePullPolicy: Never
+          command: ["/app/productservice", "migrate", "database"]
+          env:
+            - name: PRODUCT_DATABASE_HOST
+              value: mysql.infrastructure.svc.cluster.local:3306
+            - name: PRODUCT_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: productservice-db-secret
+                  key: DB_NAME
+            - name: PRODUCT_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: productservice-db-secret
+                  key: DB_USER
+            - name: PRODUCT_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: productservice-db-secret
+                  key: DB_PASSWORD
+      containers:
+        - name: service
+          image: productservice:latest
+          imagePullPolicy: Never
+          command: ["/app/productservice", "service"]
+          ports:
+            - containerPort: 8081
+            - containerPort: 8082
+          env:
+            - name: PRODUCT_GRPC_ADDRESS
+              value: ":8081"
+            - name: PRODUCT_HTTP_ADDRESS
+              value: ":8082"
+            - name: PRODUCT_DATABASE_HOST
+              value: mysql.infrastructure.svc.cluster.local:3306
+            - name: PRODUCT_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: productservice-db-secret
+                  key: DB_NAME
+            - name: PRODUCT_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: productservice-db-secret
+                  key: DB_USER
+            - name: PRODUCT_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: productservice-db-secret
+                  key: DB_PASSWORD
+        - name: message-handler
+          image: productservice:latest
+          imagePullPolicy: Never
+          command: ["/app/productservice", "message-handler"]
+          env:
+            - name: PRODUCT_HTTP_ADDRESS
+              value: ":8083"
+            - name: PRODUCT_DATABASE_HOST
+              value: mysql.infrastructure.svc.cluster.local:3306
+            - name: PRODUCT_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: productservice-db-secret
+                  key: DB_NAME
+            - name: PRODUCT_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: productservice-db-secret
+                  key: DB_USER
+            - name: PRODUCT_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: productservice-db-secret
+                  key: DB_PASSWORD
+            - name: PRODUCT_AMQP_HOST
+              value: rabbitmq.infrastructure.svc.cluster.local:5672
+            - name: PRODUCT_AMQP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-app-secret
+                  key: AMQP_USER
+            - name: PRODUCT_AMQP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-app-secret
+                  key: AMQP_PASSWORD
+        - name: workflow-worker
+          image: productservice:latest
+          imagePullPolicy: Never
+          command: ["/app/productservice", "workflow-worker"]
+          env:
+            - name: PRODUCT_HTTP_ADDRESS
+              value: ":8084"
+            - name: PRODUCT_DATABASE_HOST
+              value: mysql.infrastructure.svc.cluster.local:3306
+            - name: PRODUCT_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: productservice-db-secret
+                  key: DB_NAME
+            - name: PRODUCT_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: productservice-db-secret
+                  key: DB_USER
+            - name: PRODUCT_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: productservice-db-secret
+                  key: DB_PASSWORD
+            - name: PRODUCT_TEMPORAL_HOST
+              value: temporal.infrastructure.svc.cluster.local:7233

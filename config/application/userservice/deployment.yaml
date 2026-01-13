@@ -1,0 +1,133 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: userservice
+  labels:
+    app: userservice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: userservice
+  template:
+    metadata:
+      labels:
+        app: userservice
+    spec:
+      initContainers:
+        - name: migrator
+          image: userservice:latest
+          imagePullPolicy: Never
+          command: ["/app/userservice", "migrate", "database"]
+          env:
+            - name: USER_DATABASE_HOST
+              value: mysql.infrastructure.svc.cluster.local:3306
+            - name: USER_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: userservice-db-secret
+                  key: DB_NAME
+            - name: USER_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: userservice-db-secret
+                  key: DB_USER
+            - name: USER_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: userservice-db-secret
+                  key: DB_PASSWORD
+      containers:
+        - name: service
+          image: userservice:latest
+          imagePullPolicy: Never
+          command: ["/app/userservice", "service"]
+          ports:
+            - containerPort: 8081
+            - containerPort: 8082
+          env:
+            - name: USER_GRPC_ADDRESS
+              value: ":8081"
+            - name: USER_HTTP_ADDRESS
+              value: ":8082"
+            - name: USER_DATABASE_HOST
+              value: mysql.infrastructure.svc.cluster.local:3306
+            - name: USER_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: userservice-db-secret
+                  key: DB_NAME
+            - name: USER_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: userservice-db-secret
+                  key: DB_USER
+            - name: USER_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: userservice-db-secret
+                  key: DB_PASSWORD
+        - name: message-handler
+          image: userservice:latest
+          imagePullPolicy: Never
+          command: ["/app/userservice", "message-handler"]
+          env:
+            - name: USER_HTTP_ADDRESS
+              value: ":8083"
+            - name: USER_DATABASE_HOST
+              value: mysql.infrastructure.svc.cluster.local:3306
+            - name: USER_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: userservice-db-secret
+                  key: DB_NAME
+            - name: USER_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: userservice-db-secret
+                  key: DB_USER
+            - name: USER_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: userservice-db-secret
+                  key: DB_PASSWORD
+            - name: USER_AMQP_HOST
+              value: rabbitmq.infrastructure.svc.cluster.local:5672
+            - name: USER_AMQP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-app-secret
+                  key: AMQP_USER
+            - name: USER_AMQP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-app-secret
+                  key: AMQP_PASSWORD
+            - name: USER_TEMPORAL_HOST
+              value: temporal.infrastructure.svc.cluster.local:7233
+        - name: workflow-worker
+          image: userservice:latest
+          imagePullPolicy: Never
+          command: ["/app/userservice", "workflow-worker"]
+          env:
+            - name: USER_HTTP_ADDRESS
+              value: ":8084"
+            - name: USER_DATABASE_HOST
+              value: mysql.infrastructure.svc.cluster.local:3306
+            - name: USER_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: userservice-db-secret
+                  key: DB_NAME
+            - name: USER_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: userservice-db-secret
+                  key: DB_USER
+            - name: USER_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: userservice-db-secret
+                  key: DB_PASSWORD
+            - name: USER_TEMPORAL_HOST
+              value: temporal.infrastructure.svc.cluster.local:7233

@@ -1,0 +1,131 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+spec:
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: 3306
+  selector:
+    app: mysql
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql
+spec:
+  serviceName: mysql
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      initContainers:
+        - name: mysql-init
+          image: mysql:8.3
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: mysql-root-password
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+              shopt -s nullglob
+
+              /usr/local/bin/docker-entrypoint.sh mysqld --skip-networking=0 --bind-address=127.0.0.1 &
+              pid=$!
+
+              ready=0
+              for _ in {1..60}; do
+                if mysqladmin ping -uroot -p"$MYSQL_ROOT_PASSWORD" --protocol=TCP --host=127.0.0.1 >/dev/null 2>&1; then
+                  ready=1
+                  break
+                fi
+                sleep 2
+              done
+
+              if [ "$ready" -ne 1 ]; then
+                echo "MySQL did not become ready in time." >&2
+                exit 1
+              fi
+
+              for secret_dir in /secrets/*; do
+                if [ -f "$secret_dir/DB_NAME" ]; then
+                  db_name="$(cat "$secret_dir/DB_NAME")"
+                  db_user="$(cat "$secret_dir/DB_USER")"
+                  db_password="$(cat "$secret_dir/DB_PASSWORD")"
+
+                  echo "Creating database: $db_name for user: $db_user"
+                  mysql -uroot -p"$MYSQL_ROOT_PASSWORD" --protocol=TCP --host=127.0.0.1 <<SQL
+              CREATE DATABASE IF NOT EXISTS \`${db_name}\`;
+              CREATE USER IF NOT EXISTS '${db_user}'@'%' IDENTIFIED BY '${db_password}';
+              GRANT ALL PRIVILEGES ON \`${db_name}\`.* TO '${db_user}'@'%';
+              FLUSH PRIVILEGES;
+              SQL
+                fi
+              done
+
+              mysqladmin -uroot -p"$MYSQL_ROOT_PASSWORD" --protocol=TCP --host=127.0.0.1 shutdown
+              wait "$pid"
+          volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql
+            - name: secret-user
+              mountPath: /secrets/user
+              readOnly: true
+            - name: secret-product
+              mountPath: /secrets/product
+              readOnly: true
+            - name: secret-order
+              mountPath: /secrets/order
+              readOnly: true
+            - name: secret-payment
+              mountPath: /secrets/payment
+              readOnly: true
+            - name: secret-notification
+              mountPath: /secrets/notification
+              readOnly: true
+      containers:
+        - name: mysql
+          image: mysql:8.3
+          ports:
+            - containerPort: 3306
+              name: mysql
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: mysql-root-password
+          volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql
+      volumes:
+        - name: mysql-data
+          hostPath:
+            path: /data/mysql
+            type: DirectoryOrCreate
+        - name: secret-user
+          secret:
+            secretName: mysql-user-db
+        - name: secret-product
+          secret:
+            secretName: mysql-product-db
+        - name: secret-order
+          secret:
+            secretName: mysql-order-db
+        - name: secret-payment
+          secret:
+            secretName: mysql-payment-db
+        - name: secret-notification
+          secret:
+            secretName: mysql-notification-db
