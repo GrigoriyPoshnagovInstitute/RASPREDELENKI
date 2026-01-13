@@ -7,12 +7,18 @@ import (
 	"gitea.xscloud.ru/xscloud/golib/pkg/application/outbox"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"go.temporal.io/sdk/client"
 
 	"orderservice/pkg/common/domain"
 	appmodel "orderservice/pkg/order/application/model"
 	"orderservice/pkg/order/domain/model"
 	"orderservice/pkg/order/domain/service"
+	"orderservice/pkg/order/infrastructure/temporal/workflows"
 )
+
+type TemporalClient interface {
+	ExecuteWorkflow(ctx context.Context, options client.StartWorkflowOptions, workflow interface{}, args ...interface{}) (client.WorkflowRun, error)
+}
 
 type OrderService interface {
 	CreateOrder(ctx context.Context, order appmodel.CreateOrder) (uuid.UUID, error)
@@ -23,11 +29,13 @@ func NewOrderService(
 	uow UnitOfWork,
 	luow LockableUnitOfWork,
 	eventDispatcher outbox.EventDispatcher[outbox.Event],
+	temporalClient TemporalClient,
 ) OrderService {
 	return &orderService{
 		uow:             uow,
 		luow:            luow,
 		eventDispatcher: eventDispatcher,
+		temporalClient:  temporalClient,
 	}
 }
 
@@ -35,6 +43,7 @@ type orderService struct {
 	uow             UnitOfWork
 	luow            LockableUnitOfWork
 	eventDispatcher outbox.EventDispatcher[outbox.Event]
+	temporalClient  TemporalClient
 }
 
 func (s *orderService) CreateOrder(ctx context.Context, order appmodel.CreateOrder) (uuid.UUID, error) {
@@ -67,6 +76,9 @@ func (s *orderService) CreateOrder(ctx context.Context, order appmodel.CreateOrd
 		}
 
 		domainItems := make([]model.OrderItem, len(order.Items))
+		var wfItems []workflows.OrderItem
+		var totalPrice int64
+
 		for i, item := range order.Items {
 			product := productMap[item.ProductID]
 			domainItems[i] = model.OrderItem{
@@ -74,6 +86,11 @@ func (s *orderService) CreateOrder(ctx context.Context, order appmodel.CreateOrd
 				Quantity:  item.Quantity,
 				Price:     product.Price,
 			}
+			wfItems = append(wfItems, workflows.OrderItem{
+				ProductID: item.ProductID.String(),
+				Quantity:  item.Quantity,
+			})
+			totalPrice += product.Price * int64(item.Quantity)
 		}
 
 		domainService := s.domainService(ctx, provider)
@@ -82,7 +99,21 @@ func (s *orderService) CreateOrder(ctx context.Context, order appmodel.CreateOrd
 			return err
 		}
 		orderID = id
-		return nil
+
+		// Trigger Temporal Workflow
+		workflowOptions := client.StartWorkflowOptions{
+			ID:        "order_" + orderID.String(),
+			TaskQueue: "orderservice_task_queue",
+		}
+
+		_, err = s.temporalClient.ExecuteWorkflow(context.Background(), workflowOptions, workflows.CreateOrderWorkflow, workflows.CreateOrderParams{
+			OrderID:    orderID.String(),
+			UserID:     order.UserID.String(),
+			Items:      wfItems,
+			TotalPrice: totalPrice,
+		})
+
+		return err
 	})
 
 	return orderID, err

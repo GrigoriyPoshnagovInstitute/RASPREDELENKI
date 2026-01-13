@@ -12,7 +12,7 @@ const (
 	TransportName    = "domain"
 	ExchangeName     = "domain_event_exchange"
 	ExchangeKind     = "topic"
-	RoutingKeyPrefix = "product.go."
+	RoutingKeyPrefix = "product."
 	ContentType      = "application/json"
 )
 

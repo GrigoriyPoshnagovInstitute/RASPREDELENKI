@@ -1,9 +1,6 @@
 package main
 
 import (
-	"context"
-	"errors"
-	"net"
 	"net/http"
 	"time"
 
@@ -14,38 +11,34 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
 
-	"orderservice/api/server/orderinternal"
-	appservice "orderservice/pkg/order/application/service"
-	"orderservice/pkg/order/infrastructure/integrationevent"
-	inframysql "orderservice/pkg/order/infrastructure/mysql"
-	"orderservice/pkg/order/infrastructure/mysql/query"
-	"orderservice/pkg/order/infrastructure/transport"
-	"orderservice/pkg/order/infrastructure/transport/middlewares"
+	appservice "paymentservice/pkg/payment/application/service"
+	"paymentservice/pkg/payment/infrastructure/integrationevent"
+	inframysql "paymentservice/pkg/payment/infrastructure/mysql"
+	"paymentservice/pkg/payment/infrastructure/temporal/activity"
 )
 
-type serviceConfig struct {
+type workflowWorkerConfig struct {
 	Service  Service  `envconfig:"service"`
 	Database Database `envconfig:"database" required:"true"`
 	Temporal Temporal `envconfig:"temporal" required:"true"`
 }
 
-func service(logger logging.Logger) *cli.Command {
+func workflowWorker(logger logging.Logger) *cli.Command {
 	return &cli.Command{
-		Name:   "service",
+		Name:   "workflow-worker",
 		Before: migrateImpl(logger),
 		Action: func(c *cli.Context) error {
-			cnf, err := parseEnvs[serviceConfig]()
+			cnf, err := parseEnvs[workflowWorkerConfig]()
 			if err != nil {
 				return err
 			}
 
 			closer := libio.NewMultiCloser()
 			defer func() {
-				err = errors.Join(err, closer.Close())
+				_ = closer.Close()
 			}()
 
 			databaseConnector, err := newDatabaseConnector(cnf.Database)
@@ -66,34 +59,25 @@ func service(logger logging.Logger) *cli.Command {
 				return nil
 			}))
 
+			// Init Services
 			libUoW := mysql.NewUnitOfWork(databaseConnectionPool, inframysql.NewRepositoryProvider)
 			libLUow := mysql.NewLockableUnitOfWork(libUoW, mysql.NewLocker(databaseConnectionPool))
 			uow := inframysql.NewUnitOfWork(libUoW)
 			luow := inframysql.NewLockableUnitOfWork(libLUow)
 			eventDispatcher := outbox.NewEventDispatcher(appID, integrationevent.TransportName, integrationevent.NewEventSerializer(), libUoW)
 
-			orderInternalAPI := transport.NewOrderInternalAPI(
-				query.NewOrderQueryService(databaseConnector.TransactionalClient()),
-				appservice.NewOrderService(uow, luow, eventDispatcher, temporalClient),
-			)
+			accountService := appservice.NewAccountService(uow, luow, eventDispatcher)
+
+			w := worker.New(temporalClient, "paymentservice_task_queue", worker.Options{})
+
+			activities := activity.NewPaymentActivities(accountService)
+			w.RegisterActivity(activities)
 
 			errGroup := errgroup.Group{}
 			errGroup.Go(func() error {
-				listener, err := net.Listen("tcp", cnf.Service.GRPCAddress)
-				if err != nil {
-					return err
-				}
-				grpcServer := grpc.NewServer(grpc.ChainUnaryInterceptor(
-					middlewares.NewGRPCLoggingMiddleware(logger),
-				))
-				orderinternal.RegisterOrderInternalServiceServer(grpcServer, orderInternalAPI)
-				reflection.Register(grpcServer)
-				graceCallback(c.Context, logger, cnf.Service.GracePeriod, func(_ context.Context) error {
-					grpcServer.GracefulStop()
-					return nil
-				})
-				return grpcServer.Serve(listener)
+				return w.Run(worker.InterruptCh())
 			})
+
 			errGroup.Go(func() error {
 				router := mux.NewRouter()
 				registerHealthcheck(router)

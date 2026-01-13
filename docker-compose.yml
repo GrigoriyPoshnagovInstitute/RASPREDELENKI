@@ -69,7 +69,6 @@ services:
       USER_DATABASE_NAME: userservice_db
       USER_DATABASE_USER: userservice
       USER_DATABASE_PASSWORD: 12345Q
-
       USER_AMQP_HOST: userservice-rmq
       USER_AMQP_USER: guest
       USER_AMQP_PASSWORD: guest
@@ -120,6 +119,24 @@ services:
       userservice-rmq:
         condition: service_healthy
 
+  productservice-workflow-worker:
+    build:
+      context: ./rp-productservice
+    container_name: productservice-workflow-worker
+    command:
+      - workflow-worker
+    environment:
+      PRODUCT_DATABASE_HOST: productservice-db
+      PRODUCT_DATABASE_NAME: productservice_db
+      PRODUCT_DATABASE_USER: productservice
+      PRODUCT_DATABASE_PASSWORD: 12345Q
+      PRODUCT_TEMPORAL_HOST: userservice-temporal:7233
+    depends_on:
+      productservice-db:
+        condition: service_healthy
+      userservice-temporal:
+        condition: service_started
+
   paymentservice:
     build:
       context: ./rp-paymentservice
@@ -158,6 +175,24 @@ services:
       userservice-rmq:
         condition: service_healthy
 
+  paymentservice-workflow-worker:
+    build:
+      context: ./rp-paymentservice
+    container_name: paymentservice-workflow-worker
+    command:
+      - workflow-worker
+    environment:
+      PAYMENT_DATABASE_HOST: paymentservice-db
+      PAYMENT_DATABASE_NAME: paymentservice_db
+      PAYMENT_DATABASE_USER: paymentservice
+      PAYMENT_DATABASE_PASSWORD: 12345Q
+      PAYMENT_TEMPORAL_HOST: userservice-temporal:7233
+    depends_on:
+      paymentservice-db:
+        condition: service_healthy
+      userservice-temporal:
+        condition: service_started
+
   orderservice:
     build:
       context: ./rp-orderservice
@@ -172,9 +207,12 @@ services:
       ORDER_DATABASE_NAME: orderservice_db
       ORDER_DATABASE_USER: orderservice
       ORDER_DATABASE_PASSWORD: 12345Q
+      ORDER_TEMPORAL_HOST: userservice-temporal:7233
     depends_on:
       orderservice-db:
         condition: service_healthy
+      userservice-temporal:
+        condition: service_started
 
   orderservice-message-handler:
     build:
@@ -195,6 +233,24 @@ services:
         condition: service_healthy
       userservice-rmq:
         condition: service_healthy
+
+  orderservice-workflow-worker:
+    build:
+      context: ./rp-orderservice
+    container_name: orderservice-workflow-worker
+    command:
+      - workflow-worker
+    environment:
+      ORDER_DATABASE_HOST: orderservice-db
+      ORDER_DATABASE_NAME: orderservice_db
+      ORDER_DATABASE_USER: orderservice
+      ORDER_DATABASE_PASSWORD: 12345Q
+      ORDER_TEMPORAL_HOST: userservice-temporal:7233
+    depends_on:
+      orderservice-db:
+        condition: service_healthy
+      userservice-temporal:
+        condition: service_started
 
   notificationservice:
     build:
@@ -233,6 +289,24 @@ services:
         condition: service_healthy
       userservice-rmq:
         condition: service_healthy
+
+  notificationservice-workflow-worker:
+    build:
+      context: ./rp-notificationservice
+    container_name: notificationservice-workflow-worker
+    command:
+      - workflow-worker
+    environment:
+      NOTIFICATION_DATABASE_HOST: notificationservice-db
+      NOTIFICATION_DATABASE_NAME: notificationservice_db
+      NOTIFICATION_DATABASE_USER: notificationservice
+      NOTIFICATION_DATABASE_PASSWORD: 12345Q
+      NOTIFICATION_TEMPORAL_HOST: userservice-temporal:7233
+    depends_on:
+      notificationservice-db:
+        condition: service_healthy
+      userservice-temporal:
+        condition: service_started
 
   userservice-db:
     image: "mysql:8.3"

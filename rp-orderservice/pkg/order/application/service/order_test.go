@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"go.temporal.io/sdk/client"
 
 	"gitea.xscloud.ru/xscloud/golib/pkg/application/outbox"
 
@@ -94,10 +95,24 @@ func (m *StubOrderRepo) Store(o domainmodel.Order) error {
 
 func (m *StubOrderRepo) Find(_ uuid.UUID) (*domainmodel.Order, error) { return nil, nil }
 
+type MockTemporalClient struct {
+	mock.Mock
+}
+
+func (m *MockTemporalClient) ExecuteWorkflow(ctx context.Context, options client.StartWorkflowOptions, workflow interface{}, args ...interface{}) (client.WorkflowRun, error) {
+	callArgs := m.Called(ctx, options, workflow, args)
+	// FIX: Проверка на nil, чтобы избежать паники при приведении типов
+	if callArgs.Get(0) == nil {
+		return nil, callArgs.Error(1)
+	}
+	return callArgs.Get(0).(client.WorkflowRun), callArgs.Error(1)
+}
+
 func TestOrderAppService_CreateOrder(t *testing.T) {
 	provider := new(MockRepositoryProvider)
 	uow := &MockUnitOfWork{provider: provider}
 	luow := new(MockLockableUnitOfWork)
+	temporalClient := new(MockTemporalClient)
 
 	userID := uuid.New()
 	productID := uuid.New()
@@ -121,8 +136,10 @@ func TestOrderAppService_CreateOrder(t *testing.T) {
 		orderRepo.On("NextID").Return(orderID, nil)
 		orderRepo.On("Store", mock.AnythingOfType("model.Order")).Return(nil)
 
+		temporalClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+
 		dummyDispatcher := &DummyDispatcher{}
-		service := NewOrderService(uow, luow, dummyDispatcher)
+		service := NewOrderService(uow, luow, dummyDispatcher, temporalClient)
 
 		createOrderCmd := model.CreateOrder{
 			UserID: userID,

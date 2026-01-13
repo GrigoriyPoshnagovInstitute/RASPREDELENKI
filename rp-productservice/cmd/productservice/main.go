@@ -26,6 +26,7 @@ func main() {
 			migrate(logger),
 			messageHandler(logger),
 			service(logger),
+			workflowWorker(logger),
 		},
 	}
 

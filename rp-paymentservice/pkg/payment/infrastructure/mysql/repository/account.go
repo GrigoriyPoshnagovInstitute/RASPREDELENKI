@@ -47,10 +47,10 @@ func (p *accountRepository) Store(account model.Account) (err error) {
 
 	_, err = p.client.ExecContext(p.ctx,
 		`
-	INSERT INTO account (user_id, balance, created_at, updated_at) VALUES (?, ?, ?, ?)
+	INSERT INTO account (user_id, balance, created_at, updated_at) VALUES (?, ?, ?, ?) AS new
 	ON DUPLICATE KEY UPDATE
-		balance=VALUES(balance),
-	    updated_at=VALUES(updated_at)
+		balance = new.balance,
+	    updated_at = new.updated_at
 	`,
 		account.UserID,
 		account.Balance,

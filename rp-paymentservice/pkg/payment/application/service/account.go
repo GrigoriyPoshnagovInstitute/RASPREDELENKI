@@ -16,6 +16,8 @@ import (
 
 type AccountService interface {
 	StoreUserBalance(ctx context.Context, balance appmodel.UserBalance) error
+	Charge(ctx context.Context, userID uuid.UUID, amount int64) error
+	Refund(ctx context.Context, userID uuid.UUID, amount int64) error
 }
 
 func NewAccountService(
@@ -51,6 +53,22 @@ func (s *accountService) StoreUserBalance(ctx context.Context, balance appmodel.
 		}
 
 		return domainService.UpdateBalance(balance.UserID, balance.Balance)
+	})
+}
+
+func (s *accountService) Charge(ctx context.Context, userID uuid.UUID, amount int64) error {
+	lockName := userBalanceLock(userID)
+	return s.luow.Execute(ctx, []string{lockName}, func(provider RepositoryProvider) error {
+		domainService := s.domainService(ctx, provider.AccountRepository(ctx))
+		return domainService.Charge(userID, amount)
+	})
+}
+
+func (s *accountService) Refund(ctx context.Context, userID uuid.UUID, amount int64) error {
+	lockName := userBalanceLock(userID)
+	return s.luow.Execute(ctx, []string{lockName}, func(provider RepositoryProvider) error {
+		domainService := s.domainService(ctx, provider.AccountRepository(ctx))
+		return domainService.Refund(userID, amount)
 	})
 }
 
