@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: paymentservice-worker
+  labels:
+    app: paymentservice-worker
+    component: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: paymentservice-worker
+  template:
+    metadata:
+      labels:
+        app: paymentservice-worker
+        component: worker
+    spec:
+      containers:
+        - name: workflow-worker
+          image: paymentservice:latest
+          imagePullPolicy: Never
+          command: ["/app/paymentservice", "workflow-worker"]
+          env:
+            - name: PAYMENT_HTTP_ADDRESS
+              value: ":8084"
+            - name: PAYMENT_DATABASE_HOST
+              value: mysql.infrastructure.svc.cluster.local:3306
+            - name: PAYMENT_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: paymentservice-db-secret
+                  key: DB_NAME
+            - name: PAYMENT_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: paymentservice-db-secret
+                  key: DB_USER
+            - name: PAYMENT_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: paymentservice-db-secret
+                  key: DB_PASSWORD
+            - name: PAYMENT_TEMPORAL_HOST
+              value: temporal.infrastructure.svc.cluster.local:7233

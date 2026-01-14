@@ -3,28 +3,41 @@ set -e
 
 echo "--- УНИЧТОЖЕНИЕ СТАРОГО КЛАСТЕРА ---"
 ./scripts/delete-kind-cluster.sh || true
-sudo rm -rf data/mysql || true # Чистим данные базы, чтобы не было конфликтов схем
+# Используем sudo, так как Docker создает файлы от root, и обычный rm падает с Permission denied
+sudo rm -rf data || true
 
 echo "--- СОЗДАНИЕ КЛАСТЕРА ---"
 ./scripts/create-kind-cluster.sh
 
-echo "--- ПОДГОТОВКА ИНФРАСТРУКТУРЫ (FIX AMD64) ---"
-# Скачиваем правильные архитектуры, чтобы kind не ругался на digest
-docker pull --platform linux/amd64 mysql:8.3
-docker pull --platform linux/amd64 rabbitmq:3.13-management
-docker pull --platform linux/amd64 temporalio/auto-setup:1.29.1
-# Пересобираем Temporal UI без provenance, чтобы kind не падал
-echo "FROM temporalio/ui:2.34.0" | docker build --provenance=false -t temporalio/ui:2.34.0-clean -
-docker tag temporalio/ui:2.34.0-clean temporalio/ui:2.34.0
+echo "--- ПОДГОТОВКА ИНФРАСТРУКТУРЫ (FIX DIGEST & PROVENANCE) ---"
 
-echo "--- ЗАГРУЗКА ИНФРАСТРУКТУРЫ В KIND ---"
-kind load docker-image mysql:8.3 --name rp-practice
-kind load docker-image rabbitmq:3.13-management --name rp-practice
-kind load docker-image temporalio/auto-setup:1.29.1 --name rp-practice
-kind load docker-image temporalio/ui:2.34.0 --name rp-practice
+# Функция: скачивает, пересобирает образ БЕЗ метаданных (чтобы Kind не падал) и загружает
+function clean_and_load {
+    IMAGE=$1
+    echo ">>> Обработка $IMAGE..."
+
+    # 1. Скачиваем оригинал
+    docker pull $IMAGE
+
+    # 2. Пересобираем локально с флагом --provenance=false (убирает attestations, от которых падает kind)
+    # Создаем временный тег -clean
+    echo "FROM $IMAGE" | docker build --provenance=false -t "$IMAGE-clean" -
+
+    # 3. Вешаем оригинальный тег на наш чистый образ
+    docker tag "$IMAGE-clean" $IMAGE
+
+    # 4. Загружаем в Kind
+    kind load docker-image $IMAGE --name rp-practice
+}
+
+# Применяем лечение ко всей инфраструктуре
+clean_and_load "mysql:8.3"
+clean_and_load "rabbitmq:3.13-management"
+clean_and_load "temporalio/auto-setup:1.29.1"
+clean_and_load "temporalio/ui:2.34.0"
 
 echo "--- СБОРКА И ЗАГРУЗКА ПРИЛОЖЕНИЙ ---"
-# Используем твой скрипт, он хороший
+# Твои сервисы собираются локально, у них этой проблемы нет
 ./scripts/load-images.sh
 
 echo "--- ПРИМЕНЕНИЕ КОНФИГУРАЦИЙ ---"
@@ -36,7 +49,7 @@ kubectl wait --namespace infrastructure --for=condition=ready pod --selector=app
 kubectl wait --namespace infrastructure --for=condition=ready pod --selector=app=rabbitmq --timeout=180s
 kubectl wait --namespace infrastructure --for=condition=ready pod --selector=app=temporal --timeout=180s
 
-# Патчим Temporal UI (фиксы, которые мы делали руками)
+# Патчи для Temporal UI (фикс порта и ссылок)
 echo "--- ЛЕЧЕНИЕ TEMPORAL UI ---"
 kubectl set env deployment/temporal-ui -n infrastructure TEMPORAL_PORT="8080"
 kubectl patch deployment temporal-ui -n infrastructure -p '{"spec": {"template": {"spec": {"enableServiceLinks": false}}}}'
@@ -44,13 +57,11 @@ kubectl patch deployment temporal-ui -n infrastructure -p '{"spec": {"template":
 kubectl rollout status deployment/temporal-ui -n infrastructure
 
 echo "--- ЗАПУСК ПРИЛОЖЕНИЙ ---"
-# Патчим NotificationService (фикс конфликта портов)
-# (Если ты уже поменял файл руками - это не повредит)
-sed -i 's/name: NOTIFICATION_HTTP_ADDRESS/name: NOTIFICATION_SERVICE_HTTP_ADDRESS/g' config/application/notificationservice/deployment.yaml || true
-
+# Применяем твои новые конфиги (где мы разбили deployment на 3 части)
 kubectl apply -k config/application
 
 echo "⏳ --- ОЖИДАНИЕ ГОТОВНОСТИ ПРИЛОЖЕНИЙ ---"
+# Ждем пока все поды поднимутся
 kubectl wait --namespace application --for=condition=ready pod --all --timeout=300s
 
 echo "✅ --- ВСЕ ГОТОВО! ЗАПУСКАЙ ./ports.sh ---"

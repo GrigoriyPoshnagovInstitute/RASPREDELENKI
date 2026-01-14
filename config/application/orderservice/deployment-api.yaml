@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orderservice-api
+  labels:
+    app: orderservice
+    component: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orderservice
+  template:
+    metadata:
+      labels:
+        app: orderservice
+        component: api
+    spec:
+      initContainers:
+        - name: migrator
+          image: orderservice:latest
+          imagePullPolicy: Never
+          command: ["/app/orderservice", "migrate", "database"]
+          env:
+            - name: ORDER_DATABASE_HOST
+              value: mysql.infrastructure.svc.cluster.local:3306
+            - name: ORDER_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: orderservice-db-secret
+                  key: DB_NAME
+            - name: ORDER_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: orderservice-db-secret
+                  key: DB_USER
+            - name: ORDER_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: orderservice-db-secret
+                  key: DB_PASSWORD
+      containers:
+        - name: service
+          image: orderservice:latest
+          imagePullPolicy: Never
+          command: ["/app/orderservice", "service"]
+          ports:
+            - containerPort: 8081
+            - containerPort: 8082
+          env:
+            - name: ORDER_GRPC_ADDRESS
+              value: ":8081"
+            - name: ORDER_HTTP_ADDRESS
+              value: ":8082"
+            - name: ORDER_DATABASE_HOST
+              value: mysql.infrastructure.svc.cluster.local:3306
+            - name: ORDER_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: orderservice-db-secret
+                  key: DB_NAME
+            - name: ORDER_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: orderservice-db-secret
+                  key: DB_USER
+            - name: ORDER_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: orderservice-db-secret
+                  key: DB_PASSWORD
+            - name: ORDER_TEMPORAL_HOST
+              value: temporal.infrastructure.svc.cluster.local:7233

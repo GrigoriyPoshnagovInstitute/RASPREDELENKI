@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: productservice-api
+  labels:
+    app: productservice
+    component: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: productservice
+  template:
+    metadata:
+      labels:
+        app: productservice
+        component: api
+    spec:
+      initContainers:
+        - name: migrator
+          image: productservice:latest
+          imagePullPolicy: Never
+          command: ["/app/productservice", "migrate", "database"]
+          env:
+            - name: PRODUCT_DATABASE_HOST
+              value: mysql.infrastructure.svc.cluster.local:3306
+            - name: PRODUCT_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: productservice-db-secret
+                  key: DB_NAME
+            - name: PRODUCT_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: productservice-db-secret
+                  key: DB_USER
+            - name: PRODUCT_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: productservice-db-secret
+                  key: DB_PASSWORD
+      containers:
+        - name: service
+          image: productservice:latest
+          imagePullPolicy: Never
+          command: ["/app/productservice", "service"]
+          ports:
+            - containerPort: 8081
+            - containerPort: 8082
+          env:
+            - name: PRODUCT_GRPC_ADDRESS
+              value: ":8081"
+            - name: PRODUCT_HTTP_ADDRESS
+              value: ":8082"
+            - name: PRODUCT_DATABASE_HOST
+              value: mysql.infrastructure.svc.cluster.local:3306
+            - name: PRODUCT_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: productservice-db-secret
+                  key: DB_NAME
+            - name: PRODUCT_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: productservice-db-secret
+                  key: DB_USER
+            - name: PRODUCT_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: productservice-db-secret
+                  key: DB_PASSWORD

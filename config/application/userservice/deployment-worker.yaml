@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: userservice-worker
+  labels:
+    app: userservice-worker
+    component: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: userservice-worker
+  template:
+    metadata:
+      labels:
+        app: userservice-worker
+        component: worker
+    spec:
+      containers:
+        - name: workflow-worker
+          image: userservice:latest
+          imagePullPolicy: Never
+          command: ["/app/userservice", "workflow-worker"]
+          env:
+            - name: USER_HTTP_ADDRESS
+              value: ":8084"
+            - name: USER_DATABASE_HOST
+              value: mysql.infrastructure.svc.cluster.local:3306
+            - name: USER_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: userservice-db-secret
+                  key: DB_NAME
+            - name: USER_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: userservice-db-secret
+                  key: DB_USER
+            - name: USER_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: userservice-db-secret
+                  key: DB_PASSWORD
+            - name: USER_TEMPORAL_HOST
+              value: temporal.infrastructure.svc.cluster.local:7233

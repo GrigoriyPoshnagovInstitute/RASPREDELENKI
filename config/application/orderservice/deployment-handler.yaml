@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orderservice-handler
+  labels:
+    app: orderservice-handler
+    component: handler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orderservice-handler
+  template:
+    metadata:
+      labels:
+        app: orderservice-handler
+        component: handler
+    spec:
+      containers:
+        - name: message-handler
+          image: orderservice:latest
+          imagePullPolicy: Never
+          command: ["/app/orderservice", "message-handler"]
+          env:
+            - name: ORDER_HTTP_ADDRESS
+              value: ":8083"
+            - name: ORDER_DATABASE_HOST
+              value: mysql.infrastructure.svc.cluster.local:3306
+            - name: ORDER_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: orderservice-db-secret
+                  key: DB_NAME
+            - name: ORDER_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: orderservice-db-secret
+                  key: DB_USER
+            - name: ORDER_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: orderservice-db-secret
+                  key: DB_PASSWORD
+            - name: ORDER_AMQP_HOST
+              value: rabbitmq.infrastructure.svc.cluster.local:5672
+            - name: ORDER_AMQP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-app-secret
+                  key: AMQP_USER
+            - name: ORDER_AMQP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-app-secret
+                  key: AMQP_PASSWORD

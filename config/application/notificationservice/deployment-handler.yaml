@@ -1,0 +1,56 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notificationservice-handler
+  labels:
+    app: notificationservice-handler
+    component: handler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notificationservice-handler
+  template:
+    metadata:
+      labels:
+        app: notificationservice-handler
+        component: handler
+    spec:
+      containers:
+        - name: message-handler
+          image: notificationservice:latest
+          imagePullPolicy: Never
+          command: ["/app/notificationservice", "message-handler"]
+          env:
+            - name: NOTIFICATION_SERVICE_HTTP_ADDRESS
+              value: ":8083"
+            - name: NOTIFICATION_DATABASE_HOST
+              value: mysql.infrastructure.svc.cluster.local:3306
+            - name: NOTIFICATION_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: notificationservice-db-secret
+                  key: DB_NAME
+            - name: NOTIFICATION_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: notificationservice-db-secret
+                  key: DB_USER
+            - name: NOTIFICATION_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: notificationservice-db-secret
+                  key: DB_PASSWORD
+            - name: NOTIFICATION_AMQP_HOST
+              value: rabbitmq.infrastructure.svc.cluster.local:5672
+            - name: NOTIFICATION_AMQP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-app-secret
+                  key: AMQP_USER
+            - name: NOTIFICATION_AMQP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-app-secret
+                  key: AMQP_PASSWORD
